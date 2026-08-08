@@ -1,255 +1,211 @@
 # Data and analytics
 
-This document is authoritative for persisted entities, aggregation semantics, and dashboard query definitions.
+This document is authoritative for current persisted entities, aggregation semantics, evidence coverage, and dashboard query definitions.
+
+For export serialization, read `evidence-export.md`. For public claims, read `positioning.md`.
 
 ## Goals
 
-- Persist enough detail for useful daily/hourly/network analytics.
-- Avoid writing a record every sampling tick.
 - Keep byte accounting exact within accepted tracker deltas.
-- Make common dashboard queries cheap.
-- Preserve network aliases and attribution history across restarts.
+- Persist useful hourly/daily/network history without one row per sample.
+- Preserve immutable network identities while allowing friendly aliases.
+- Distinguish **usage totals** from **observation coverage**.
+- Keep observation gaps and degraded metadata explicit.
+- Make dashboard/export totals reconcile from the same evidence source.
 
-## Current implementation status
-
-Persistent local analytics are now enabled in the development branch.
-
-The implemented write path is:
-
-```text
-validated traffic delta (~2 s sampling)
-  → in-memory accumulation by network/interface
-  → aligned 5-minute UsageBucket
-  → SwiftData checkpoint approximately every 15 seconds
-```
-
-Current persistence uses:
-
-- `NetworkProfileEntity` keyed by immutable network `identityKey`;
-- `UsageBucketEntity` keyed by network identity + physical interface + 5-minute bucket start;
-- `LocalUsageStore` as the UI/application-facing persistence boundary.
-
-A normal periodic checkpoint updates/upserts the current bucket instead of inserting one row per sample. A network-identity boundary triggers an immediate flush, and the menu-bar Quit path performs a final best-effort flush before termination.
-
-A hard crash can still lose the small interval accumulated since the last successful checkpoint. The current target is therefore **bounded loss of roughly the checkpoint interval**, not a claim of zero-loss crash persistence. Failed saves keep pending in-memory deltas available for retry rather than clearing them.
-
-Analytics reads combine persisted buckets with the still-pending in-memory bucket so the dashboard can remain current without increasing write frequency.
-
-Current dashboard queries support:
-
-- Today;
-- Last 7 days;
-- Last 30 days;
-- Current month;
-- All time;
-- Custom date range;
-- summary totals;
-- usage ranked by network;
-- hourly/daily trend aggregation;
-- trend for all networks or one selected network;
-- highest-usage hour/day and largest individual network/time spike.
-
-`ConnectionSessionEntity` is **not yet implemented**. Session duration/count, crash-recovery end reasons, and a dedicated network-detail session history remain part of the target v1 architecture below. Therefore the current implementation is a substantial persistence/analytics slice, not completion of the full M3/M5 acceptance gates.
-
-## Storage technology
-
-Use SwiftData for v1 with a schema designed around three concepts:
-
-1. network profiles;
-2. connection sessions;
-3. bounded usage buckets.
-
-Use `UInt64` in domain code for byte values. If SwiftData persistence requires a signed integer representation, validate conversion boundaries and store as `Int64` only after proving values fit; never silently truncate or use floating point for canonical byte totals.
-
-The current implementation follows this rule: domain/aggregation models use `UInt64`; persisted bucket byte counters use guarded `Int64` conversion and reject overflow rather than truncating.
-
-## Entity: NetworkProfile
-
-Represents a recurring network identity.
-
-Suggested fields:
+## Current write path
 
 ```text
-id: UUID
-identityKey: String (unique)
-kind: wifi | ethernet | usb | other
-interfaceName: String
-ssid: String?
-displayAlias: String?
-firstSeenAt: Date
-lastSeenAt: Date
-lastKnownExpensive: Bool
-lastKnownConstrained: Bool
+physical interface counters (~2 s)
+        │
+        ├── validated traffic delta
+        └── observation heartbeat
+                 │
+                 ▼
+       in-memory accumulation
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+  UsageBucket       CoverageBucket
+  5-minute          5-minute
+        └────────┬────────┘
+                 │
+          ~15 s checkpoint
+                 │
+                 ▼
+           SwiftData local
 ```
 
-Display-name precedence:
+Sampling and persistence cadences remain deliberately separate.
 
-1. user alias;
-2. SSID;
-3. derived wired label;
-4. generic connection label.
+## Current SwiftData entities
 
-Do not use mutable display names as primary keys.
+### NetworkProfileEntity
 
-Current `NetworkProfileEntity` stores the identity key, current display/network name, connection kind, interface name, first/last seen timestamps, and last known expensive/constrained metadata. User aliases are still pending.
+Purpose: recurring canonical network identity plus presentation metadata.
 
-## Entity: ConnectionSession
-
-Represents one contiguous period in which a physical interface remains associated with one network identity.
-
-Suggested fields:
+Current fields conceptually include:
 
 ```text
-id: UUID
-networkProfileID: UUID
-interfaceName: String
-startedAt: Date
-endedAt: Date?
-lastCheckpointAt: Date
-rxBytes: Int64
-txBytes: Int64
-isExpensive: Bool
-isConstrained: Bool
-endReason: networkChange | disconnect | sleep | appQuit | crashRecovery | other
+identityKey            unique immutable grouping key
+networkName            last observed system/derived name
+displayAlias?          user-controlled presentation override
+connectionKind
+interfaceName
+firstSeenAt
+lastSeenAt
+lastKnownExpensive
+lastKnownConstrained
 ```
 
-Session totals are useful for network-detail UX and reconciliation, but time-series charts should be driven by usage buckets.
-
-This entity is still pending in the current implementation. Do not infer connected duration or session counts from usage buckets alone.
-
-## Entity: UsageBucket
-
-Represents traffic accumulated over a short bounded time interval.
-
-Default target width: 5 minutes, but split early whenever the network identity changes, the interface disappears, the app sleeps, or another attribution boundary occurs.
-
-Suggested fields:
+Display precedence:
 
 ```text
-id: UUID
-sessionID: UUID
-networkProfileID: UUID
-interfaceName: String
-startedAt: Date
-endedAt: Date
-rxBytes: Int64
-txBytes: Int64
-isExpensive: Bool
-isConstrained: Bool
+user alias
+  ↓
+observed network name / SSID
+  ↓
+derived wired label
+  ↓
+generic label
 ```
 
-A bucket belongs to exactly one network identity and one physical interface context.
+An alias must never rewrite `identityKey` or merge historical identities.
 
-The current `UsageBucketEntity` stores the immutable network identity key directly because the session layer is not yet present. Its unique bucket key combines network identity, interface name, and the aligned bucket start time. This representation must remain reconcilable when sessions/profile relationships are introduced later.
+### UsageBucketEntity
 
-## Why both sessions and buckets
+Purpose: canonical traffic totals for one network/interface context in an aligned short interval.
 
-Sessions answer:
+Current fields:
 
-- how long was I connected?
-- how many connection periods occurred?
-- how much did this session use?
+```text
+bucketKey              unique
+identityKey
+networkName
+connectionKind
+interfaceName
+startedAt
+endedAt
+downloadedBytes        persisted guarded Int64
+uploadedBytes          persisted guarded Int64
+isExpensive
+isConstrained
+lastObservedAt
+```
 
-Buckets answer:
+Domain byte values remain `UInt64`. Persistence uses guarded `Int64` conversion and rejects overflow rather than truncating.
 
-- how much was used per hour/day?
-- what does the time-series chart show?
-- how much fell inside an arbitrary date range?
+### EvidenceCoverageEntity
 
-Trying to derive arbitrary-period analytics only from long sessions would create inaccurate boundary allocations.
+Purpose: describe how much time the tracker was actually observing and whether that observation was healthy/fully identified.
 
-## Bucket lifecycle
+Current fields:
 
-The in-memory accumulator receives validated deltas from the tracker/measurement loop.
+```text
+bucketKey              unique 5-minute coverage bucket
+startedAt
+endedAt
+activeSeconds
+healthySeconds
+metadataDegradedSeconds
+trackingDegradedSeconds
+unknownNetworkSeconds
+lastObservedAt
+```
 
-Close or flush the current bucket when any of these occurs:
+Coverage is not a traffic sample and does not store network payload/content.
 
-- 5-minute time boundary;
-- network profile changes;
-- physical interface changes/disappears;
+## Pending in-memory state
+
+`LocalUsageStore` keeps unsaved traffic and coverage in memory until checkpoint.
+
+Analytics reads combine persisted + pending state so the UI remains current without increasing write frequency.
+
+A successful flush:
+
+1. upserts network profiles;
+2. upserts traffic buckets;
+3. upserts coverage buckets;
+4. saves once;
+5. clears only successfully persisted pending values.
+
+Failed persistence keeps pending state available for retry.
+
+## Coverage semantics
+
+### Why coverage exists
+
+If Analytics selects 8 hours but Traffic Monitoring only ran for 90 minutes, a total of `2 GB` must not imply that all 8 hours were observed.
+
+Coverage therefore answers:
+
+> How much of this selected period was actually observed, and with what evidence quality?
+
+### Heartbeat aggregation
+
+The tracking loop records a coverage heartbeat while it is running.
+
+Coverage is accumulated in memory and saved with normal checkpoints. It does **not** create one SwiftData row every ~2 seconds.
+
+### Long gaps
+
+A long interval between two samples may mean:
+
 - sleep;
 - app termination;
-- explicit tracker reset.
+- crash;
+- scheduler suspension;
+- unavailable counters.
 
-Persist checkpoints while a bucket is still open so a crash loses only a small bounded amount of history.
+The store caps the amount of one interval that can be counted as continuously observed. The remaining time stays **unobserved**.
 
-A checkpoint updates the current stored row rather than appending a duplicate record.
-
-Current implementation details:
-
-- sampling remains approximately 2 seconds;
-- persistence checkpoint target is approximately 15 seconds;
-- buckets are aligned to 5-minute epoch boundaries;
-- accepted deltas remain pending in memory until successfully saved;
-- a network identity change forces a flush before subsequent attribution continues;
-- normal menu-bar Quit flushes before app termination;
-- the analytics read path includes both persisted and pending values without double-counting.
-
-## Time semantics
-
-Store timestamps as absolute `Date` values.
-
-For analytics grouping, use the user's current Calendar/time zone at query/presentation time unless a future product requirement asks for historical-zone preservation.
-
-Important cases:
-
-- DST day may contain 23 or 25 hours;
-- a bucket can cross midnight only if implementation fails to split on the configured bucket boundary; query logic must still clip correctly;
-- custom-range summaries include only bucket overlap in the range.
-
-Because 5-minute buckets can partially overlap an arbitrary start/end boundary, v1 may either:
-
-1. include full overlapping buckets and document a maximum small boundary error; or
-2. proportionally allocate a bucket by time.
-
-Preferred v1: split common calendar boundaries during accumulation and use proportional allocation only for custom-range edge buckets. Canonical stored byte totals remain unchanged.
-
-Current custom-range implementation includes whole overlapping buckets. Because buckets are only five minutes wide, this has a bounded edge error but still needs the planned clipping/proportional allocation work before the analytics milestone is considered complete.
-
-## Analytics service contract
-
-Target API surface:
-
-```swift
-protocol AnalyticsService {
-    func summary(for period: DateInterval, filter: UsageFilter) async throws -> UsageSummary
-    func timeSeries(for period: DateInterval, granularity: TimeGranularity, filter: UsageFilter) async throws -> [UsageTimePoint]
-    func usageByNetwork(for period: DateInterval, filter: UsageFilter) async throws -> [NetworkUsageRow]
-    func networkDetail(networkID: UUID, period: DateInterval) async throws -> NetworkDetailSummary
-}
-```
-
-`UsageFilter` can include:
+Current default cap:
 
 ```text
-network IDs
-network kind
-expensive only / exclude expensive / all
-download / upload / total presentation mode
+maximumContinuousObservationGap = 10 seconds
 ```
 
-The canonical storage always keeps RX and TX separately.
+This is conservative by design: prefer incomplete evidence over invented coverage.
 
-The current implementation uses `HistoricalAnalyticsViewModel` plus the pure `UsageAnalyticsAggregator` over snapshots from `LocalUsageStore`. A dedicated long-lived `AnalyticsService` protocol remains a refactoring target once the persistence semantics are validated on real usage.
+## Evidence quality
 
-## Metric definitions
-
-### Download
+Current states:
 
 ```text
-SUM(rxBytes)
+identified
+partiallyIdentified
+unknownNetwork
+trackingDegraded
 ```
 
-### Upload
+Current precedence:
+
+1. tracking error/persistence problem → `trackingDegraded`;
+2. unknown Wi-Fi/network identity → `unknownNetwork`;
+3. weaker metadata identity or observation gap → `partiallyIdentified`;
+4. otherwise → `identified`.
+
+The evidence-quality state complements, rather than replaces, the numeric coverage values.
+
+### Network identity quality
+
+Current examples:
+
+- named Wi-Fi via SSID → `identified`;
+- Wi-Fi with `ssid-unavailable` → `unknownNetwork`;
+- wired fallback such as `wired:enX:unknown-network` → `partiallyIdentified` when it contributes traffic;
+- other generic physical identity → `partiallyIdentified` when it contributes traffic.
+
+A zero-byte fallback interface does not by itself lower evidence quality for the whole period.
+
+## Usage aggregation
+
+Canonical metrics:
 
 ```text
-SUM(txBytes)
-```
-
-### Total
-
-```text
-SUM(rxBytes + txBytes)
+download = SUM(downloadedBytes)
+upload   = SUM(uploadedBytes)
+total    = download + upload
 ```
 
 ### Network share
@@ -258,167 +214,159 @@ SUM(rxBytes + txBytes)
 networkTotal / allNetworkTotal
 ```
 
-for the same selected period and filters.
+for the same selected period.
 
-### Peak period
+### Trend
 
-For the currently selected period/filter:
+Current granularity:
 
 ```text
-argmax(timeSeries.total)
+Today                              hourly
+7 days / 30 days / Month / All     daily
+Custom                             daily
 ```
 
-Use hourly points for Today and daily points for longer built-in ranges. Product copy is `Highest usage hour` or `Highest usage day`, not a technical peak-rate label.
+### Peak
+
+```text
+argmax(timeSeries.totalBytes)
+```
+
+Product labels are `Highest usage hour` or `Highest usage day`; this is interval volume, not instantaneous throughput.
 
 ### Largest network spike
 
-For the currently selected period/filter:
-
 ```text
-argmax(networkTimeSeries.total)
+argmax(networkTimeSeries.totalBytes)
 ```
 
-This identifies the largest individual network/time bucket after hourly/daily aggregation. It is usage volume in an interval, not instantaneous throughput.
+## Supported timeframes
 
-### Connected duration
-
-Use session intervals clipped to the selected period. Avoid summing duration twice if concurrent physical interfaces are shown in an all-network total; duration is meaningful primarily in per-network detail.
-
-### Session count
-
-Count sessions that overlap the selected period, not only those that start inside it.
-
-Connected duration/session count remain unavailable until `ConnectionSessionEntity` exists.
-
-## Default time ranges
-
-Provide reusable period builders for:
+Current `AnalyticsTimeframe` supports:
 
 - Today;
-- Last 7 days;
-- Last 30 days;
-- Current month;
-- Previous month (optional in v1 UI);
+- 7 days;
+- 30 days;
+- This month;
 - All time;
-- Custom date range.
+- Custom.
 
-Avoid embedding date arithmetic directly in views.
+For custom ranges the current usage query includes whole overlapping five-minute buckets. This creates a bounded edge error at arbitrary range boundaries and remains a future clipping refinement.
 
-Current `AnalyticsTimeframe` owns this period arithmetic. `Custom` normalizes From/To order and includes the full selected ending calendar day.
+## Network aliases
 
-## Time-series granularity
+Aliases are persisted on `NetworkProfileEntity`.
 
-Current policy:
+Rules:
 
-- Today → hourly;
-- 7D / 30D / Month / All time / Custom → daily.
+- blank alias removes the override;
+- alias changes presentation only;
+- canonical identity remains unchanged;
+- all historical usage for the identity displays the current alias;
+- aliasing an unknown Wi-Fi identity does not retroactively prove which SSID produced that history.
 
-A future refinement may switch very long custom/all-time ranges to weekly or monthly granularity for readability and query efficiency.
+## Network detail
 
-The aggregation layer returns semantic points; SwiftUI does not reaggregate raw 2-second samples.
+The current detail view derives from selected-period snapshots and shows:
 
-## Network grouping
+- total/download/upload;
+- highest usage hour/day;
+- trend;
+- first/last observed;
+- identity quality;
+- connection kind;
+- `isExpensive`;
+- `isConstrained`;
+- alias editor.
 
-Dashboard rows group by network `identityKey`, then render the current display/network name.
+Connection-session count/duration remains unavailable until a dedicated session entity is implemented. Do not infer connected duration from usage buckets.
 
-Renaming a profile changes display only; historical records should continue to refer to the same identity.
+## Expensive / constrained metadata
 
-If SSID was unavailable and later becomes available, do not automatically merge old `ssid-unavailable` data into a named network because the attribution cannot be proven. A future manual merge feature may be considered.
+These are stored on usage buckets because they describe the observed path at the time of traffic.
 
-Current Wi-Fi identity remains based on interface + SSID when SSID is available. When permission is unavailable, traffic is safely grouped under the explicit unnamed Wi-Fi identity; it cannot later be retroactively assigned to a particular SSID.
+`isExpensive` may be useful for likely hotspot/mobile contexts, but it is not proof of a phone hotspot.
 
-## Expensive-network analytics
+`isConstrained` is exported and shown in network detail when observed.
 
-Store `isExpensive` on each bucket/session rather than only on the profile, because that path characteristic can change over time.
+## Export data source
 
-This enables queries such as:
+A2 JSON/CSV export uses the same selected-period snapshots, aggregator, network rows, and coverage summary as Analytics.
+
+This creates the invariant:
 
 ```text
-usage where isExpensive == true during current month
+Analytics totals == export totals
 ```
 
-This is useful for likely mobile/hotspot consumption.
-
-Current bucket storage retains `isExpensive` and `isConstrained`. The Networks UI can label such usage `Likely hotspot / expensive`, but `NWPath.isExpensive` remains a signal rather than proof of a phone hotspot.
-
-## Concurrent interfaces
-
-Byte totals across multiple physical interfaces are additive.
-
-Example:
-
-```text
-Wi-Fi:    500 MB
-Ethernet: 200 MB
-Total:    700 MB
-```
-
-Do not attempt to deduplicate legitimate simultaneous physical traffic. Deduplication belongs earlier in the tracker by excluding virtual/tunnel layers.
+Export schema details live in `evidence-export.md`.
 
 ## Reconciliation invariants
 
-For any complete period and filter:
+For a complete query result:
 
 ```text
-summary.download == sum(timeSeries.download)
-summary.upload   == sum(timeSeries.upload)
-summary.total    == summary.download + summary.upload
-sum(usageByNetwork.total) == summary.total
+summary.downloadedBytes == SUM(networkRows.downloadedBytes)
+summary.uploadedBytes   == SUM(networkRows.uploadedBytes)
+summary.totalBytes      == SUM(networkRows.totalBytes)
+summary.totalBytes      == SUM(timeSeries.totalBytes)
 ```
 
-Allow only explicitly documented differences caused by custom-range partial-bucket allocation/rounding.
+For export:
 
-These invariants have deterministic aggregation tests. The local store also has a checkpoint test proving that a delta is counted once before and after moving from pending memory into SwiftData, preventing a common double-counting failure mode.
+```text
+export.totals.totalBytes == SUM(export.networks.totalBytes)
+```
 
-## Units and formatting
+For coverage:
 
-Canonical storage is bytes.
+```text
+unobservedSeconds = MAX(0, selectedSeconds - observedSeconds)
+observedRatio     = observedSeconds / selectedSeconds
+```
 
-Formatting is presentation-only. Use one consistent convention in the UI and label it. Preferred initial convention: decimal network units (kB, MB, GB) because mobile plans are typically marketed in decimal GB.
+Tests also verify that moving a pending usage/coverage bucket through a checkpoint does not double count it.
 
-Do not persist rounded MB/GB values.
+## Crash / relaunch semantics
 
-## Retention
+Traffic already persisted before a hard crash survives. Pending traffic since the last successful checkpoint may be lost.
 
-For v1, retain all local usage history.
+On relaunch:
 
-The schema should allow later compaction, for example converting old 5-minute buckets into daily aggregates, but do not implement destructive compaction until real storage measurements justify it.
+- counter baselines start fresh;
+- no bytes are invented across the process gap;
+- the gap remains unobserved in coverage;
+- previous persisted history remains queryable.
 
-At 5-minute granularity the expected record volume is modest for a desktop app. The current design creates at most one row per active network/interface per 5-minute interval rather than one row every 2-second sample.
+Full session-aware crash end reasons remain future work.
 
-## Repository responsibilities
+## Privacy boundary
 
-The persistence boundary should own:
+Current persistence does not store:
 
-- upsert/find `NetworkProfile` by identity key;
-- open/update/close sessions;
-- open/update/close buckets;
-- stale-session recovery;
-- date-range reads for analytics;
-- alias updates;
-- optional delete/reset history operation.
+- packet payloads;
+- destinations;
+- DNS history;
+- browsing content;
+- BSSID;
+- source process/application identity.
 
-Views should not perform raw SwiftData fetches.
+Coverage stores durations/status only.
 
-Current `LocalUsageStore` already owns profile/bucket upserts, checkpointing, pending-memory reconciliation, and date-range snapshot reads. Session lifecycle, alias updates, and reset-history operations remain pending.
+## Storage growth
 
-## Crash recovery
+The design creates at most roughly one usage row per active network/interface per five-minute interval plus one low-frequency coverage row per five-minute interval, rather than hundreds of raw samples.
 
-Target full session-aware behavior at launch:
+Do not implement destructive compaction until real long-running storage measurements justify it.
 
-1. find sessions left open from the previous process;
-2. close them at their `lastCheckpointAt`;
-3. close any open bucket at its last checkpoint;
-4. mark session end reason `crashRecovery`;
-5. never bridge counters from that session to current counters.
+## Change rules
 
-The current bucket-only implementation is conservative in a simpler way: only successfully checkpointed deltas survive a hard process crash, and a relaunch starts measurement from fresh counter baselines. No bytes are invented for the unobserved gap. Full stale-session metadata recovery remains pending until sessions are implemented.
+When changing usage, coverage, identity, or persistence semantics:
 
-## Schema migration discipline
-
-Before changing stored fields:
-
-- document the semantic change;
-- add/update migration strategy if persistent releases already exist;
-- preserve byte totals and network-profile identity wherever possible;
-- add fixture-based migration tests once the first public schema ships.
+1. update domain/persistence tests;
+2. preserve byte reconciliation;
+3. preserve explicit unknown/gap states;
+4. avoid new high-frequency rows;
+5. update this document;
+6. update `evidence-export.md` if exported semantics change;
+7. do not broaden product claims beyond `positioning.md`.
