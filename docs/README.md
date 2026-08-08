@@ -4,6 +4,11 @@ The documentation is organized for progressive disclosure: start with the smalle
 
 ## Reading paths
 
+### Running the app without Xcode
+
+1. `run-without-xcode.md`
+2. `m1-validation.md` only when validating measurement behavior
+
 ### Implementing the next milestone
 
 1. `../AGENTS.md`
@@ -40,6 +45,7 @@ The documentation is organized for progressive disclosure: start with the smalle
 - `architecture.md` — components, dependency direction, runtime data flow.
 - `tracking-engine.md` — interface enumeration, byte counters, network identity, transitions, VPN, sleep/wake.
 - `m1-validation.md` — compact real-Mac checklist for the current measurement feasibility gate.
+- `run-without-xcode.md` — download and launch the CI-built `.app` on a Mac without full Xcode.
 - `data-and-analytics.md` — SwiftData entities, buckets, sessions, retention, queries.
 - `ux.md` — menu-bar and dashboard information architecture.
 - `implementation-plan.md` — phased delivery plan with acceptance gates.
