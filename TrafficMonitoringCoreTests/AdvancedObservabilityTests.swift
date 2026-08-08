@@ -20,25 +20,30 @@ final class AdvancedObservabilityTests: XCTestCase {
         XCTAssertEqual(classifier.classify(host: nil), .unknown)
     }
 
-    func testApplicationEvidenceAggregatorKeepsUnknownAndMissingBytesExplicit() {
+    func testApplicationEvidenceAggregatorKeepsLocalityBytesAndMissingAccountingExplicit() throws {
         let now = Date(timeIntervalSince1970: 1_786_180_800)
         let observations = [
             ApplicationFlowEvidence(observedAt: now, applicationIdentifier: "com.example.local", locality: .localNetwork, accountedBytes: 100),
-            ApplicationFlowEvidence(observedAt: now.addingTimeInterval(1), applicationIdentifier: "com.example.local", locality: .external, accountedBytes: nil),
-            ApplicationFlowEvidence(observedAt: now.addingTimeInterval(2), applicationIdentifier: nil, locality: .unknown, accountedBytes: nil)
+            ApplicationFlowEvidence(observedAt: now.addingTimeInterval(1), applicationIdentifier: "com.example.local", locality: .external, accountedBytes: 25),
+            ApplicationFlowEvidence(observedAt: now.addingTimeInterval(2), applicationIdentifier: "com.example.local", locality: .unknown, accountedBytes: nil),
+            ApplicationFlowEvidence(observedAt: now.addingTimeInterval(3), applicationIdentifier: nil, locality: .unknown, accountedBytes: nil)
         ]
-
         let rows = ApplicationEvidenceAggregator().summaries(observations)
-        XCTAssertEqual(rows.count, 2)
-
-        let app = try! XCTUnwrap(rows.first { $0.applicationIdentifier == "com.example.local" })
+        let app = try XCTUnwrap(rows.first { $0.applicationIdentifier == "com.example.local" })
         XCTAssertEqual(app.localNetworkFlows, 1)
         XCTAssertEqual(app.externalFlows, 1)
-        XCTAssertEqual(app.accountedBytes, 100)
+        XCTAssertEqual(app.unknownFlows, 1)
+        XCTAssertEqual(app.localNetworkBytes, 100)
+        XCTAssertEqual(app.externalBytes, 25)
+        XCTAssertEqual(app.accountedBytes, 125)
         XCTAssertFalse(app.hasCompleteByteAccounting)
+    }
 
-        let unknown = try! XCTUnwrap(rows.first { $0.applicationIdentifier == "Unknown application" })
-        XCTAssertEqual(unknown.unknownFlows, 1)
-        XCTAssertFalse(unknown.hasCompleteByteAccounting)
+    func testAdvancedSnapshotRoundTripsThroughBridgeJSONContract() throws {
+        let now = Date(timeIntervalSince1970: 1_786_180_800)
+        let snapshot = AdvancedObservabilitySnapshot(providerState: .active, byteAccounting: .notValidated, applications: [ApplicationEvidenceSummary(applicationIdentifier: "com.example.app", localNetworkFlows: 2, externalFlows: 1, localNetworkBytes: 100, externalBytes: 50, accountedBytes: 150, hasCompleteByteAccounting: false, lastObservedAt: now)], lastObservedAt: now, generatedAt: now)
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        XCTAssertEqual(try decoder.decode(AdvancedObservabilitySnapshot.self, from: encoder.encode(snapshot)), snapshot)
     }
 }
