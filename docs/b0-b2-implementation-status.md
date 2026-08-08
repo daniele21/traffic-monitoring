@@ -19,20 +19,25 @@ Implemented and CI-verified:
 - [x] `NEFilterControlProvider` removed after the macOS SDK proved it unavailable;
 - [x] system-extension `NEMachServiceName` + NSXPC listener;
 - [x] main-app NSXPC client;
+- [x] XPC client authentication implemented: expected host identifier + valid signature + matching non-empty Team ID;
+- [x] ad-hoc/no-Team-ID XPC clients fail closed;
 - [x] aggregate JSON IPC only; no packet payload/raw audit token IPC;
+- [x] provider runtime diagnostics: protocol version, provider start, active flows, observed flows, snapshot timestamp;
+- [x] closed-flow state is released after the final cumulative report delta;
 - [x] provider target embedded in the main `.app` under `Contents/Library/SystemExtensions`;
 - [x] host activation lifecycle with SystemExtensions framework;
 - [x] `NEFilterManager` socket/browser filter configuration;
 - [x] enable/disable lifecycle;
 - [x] explicit warning that enabling this content filter can disable another active content filter;
+- [x] signed-bundle preflight script for structure/signature/Team-ID/entitlement checks;
 - [x] unsigned SDK/build/package path passes GitHub Actions.
 
 Still required before production acceptance:
 
 - [ ] Developer ID / Apple capability provisioning for the host and provider;
 - [ ] signed activation/approval on a real Mac;
-- [ ] prove XPC runtime connectivity;
-- [ ] validate XPC caller code-signing identity before accepting clients;
+- [ ] prove authenticated XPC runtime connectivity;
+- [ ] negative runtime XPC test from a non-host process;
 - [ ] real-Mac source-app/locality capability matrix;
 - [ ] byte-reconciliation tests;
 - [ ] VPN/WebKit/helper/system-process coverage;
@@ -41,6 +46,7 @@ Still required before production acceptance:
 - [ ] notarized distribution/update/uninstall flow.
 
 Authority: `advanced-observability-feasibility.md`.
+Operational signed validation: `advanced-observability-signed-runbook.md`.
 
 ## B1 — Minimal app-attribution prototype
 
@@ -57,20 +63,22 @@ Implemented:
 - [x] flow registration by `NEFilterFlow.identifier`;
 - [x] low-frequency statistics reports while traffic is allowed;
 - [x] cumulative-report → per-flow delta accounting;
+- [x] final `.flowClosed` delta handling and active-flow cleanup;
 - [x] per-locality byte accumulation;
 - [x] in-memory aggregation before provider → app IPC;
 - [x] XPC JSON snapshot contract matching main-app domain models;
+- [x] backward-compatible optional provider diagnostic fields in the snapshot contract;
 - [x] main app prefers real XPC evidence when available;
 - [x] stale snapshots become `degraded`;
 - [x] bytes remain `notValidated` by default;
-- [x] deterministic domain tests for locality, aggregation, byte fields and snapshot serialization.
+- [x] deterministic domain tests for locality, aggregation, byte fields, diagnostics and snapshot serialization.
 
 Real-Mac B1 acceptance remains open:
 
 - [ ] signing identifier agrees with controlled source applications;
 - [ ] localhost/LAN/external classes agree with controlled destinations;
 - [ ] statistics byte deltas reconcile with controlled transfers;
-- [ ] no double counting across report updates;
+- [ ] no double counting across report updates / final close report;
 - [ ] XPC reconnect behaves across provider/app restart;
 - [ ] WebKit/helper/VPN/system traffic limitations are documented;
 - [ ] unobservable cases remain explicit.
@@ -88,6 +96,7 @@ Implemented:
 - [x] Applications table with Local / External / Unknown flow evidence;
 - [x] per-application detail view;
 - [x] byte values withheld from authoritative presentation while capability is `notValidated`;
+- [x] provider runtime diagnostics shown in the Applications status surface;
 - [x] Advanced Observability Settings section;
 - [x] embedded system-extension activation action;
 - [x] macOS approval state surfaced;
@@ -105,7 +114,7 @@ Implemented:
 Still required before production B2:
 
 - [ ] successful signed activation + filter configuration on a real Mac;
-- [ ] secure XPC caller validation;
+- [ ] authenticated XPC runtime validation;
 - [ ] B1 source-app/locality/byte acceptance;
 - [ ] advanced coverage model suitable for user-facing evidence;
 - [ ] persisted per-app buckets only after evidence semantics are proven;
@@ -119,7 +128,7 @@ Still required before production B2:
 
 Safe branch claim:
 
-> Traffic Monitoring contains an opt-in Advanced Observability prototype: an embedded macOS Filter Data Provider system extension, audit-token application identity path, local/external/unknown classification, aggregate flow statistics, XPC evidence bridge, installation/configuration lifecycle, and Applications UI. All source/build/package gates pass in CI, but real per-app evidence remains experimental until a properly signed provider is activated and validated on a Mac.
+> Traffic Monitoring contains an opt-in Advanced Observability prototype: an embedded macOS Filter Data Provider system extension, audit-token application identity path, local/external/unknown classification, aggregate flow statistics, authenticated XPC evidence bridge, installation/configuration lifecycle, runtime diagnostics, and Applications UI. Source/build/package gates pass in CI, but real per-app evidence remains experimental until a properly signed provider is activated and validated on a Mac.
 
 Unsafe claims:
 
