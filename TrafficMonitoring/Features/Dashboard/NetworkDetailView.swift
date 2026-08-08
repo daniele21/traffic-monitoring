@@ -27,18 +27,22 @@ struct NetworkDetailView: View {
 
             if let row {
                 HStack(spacing: 12) {
-                    metric("Total used", bytes(row.totalBytes))
-                    metric("Downloaded", bytes(row.downloadedBytes))
-                    metric("Uploaded", bytes(row.uploadedBytes))
-                    metric("Identity", analytics.identityQuality(for: row).title)
+                    metric("Total used", bytes(row.totalBytes), nil)
+                    metric("Downloaded", bytes(row.downloadedBytes), nil)
+                    metric("Uploaded", bytes(row.uploadedBytes), nil)
+                    metric(timeframe.peakLabel, peak.map { bytes($0.totalBytes) } ?? "—", peak.map { date($0.intervalStart) })
                 }
 
                 HStack(spacing: 14) {
                     Label(row.connectionKind.rawValue, systemImage: row.connectionKind == .wifi ? "wifi" : "network")
+                    Label(analytics.identityQuality(for: row).title, systemImage: identityIcon(for: row))
                     Text("First observed: \(date(row.firstSeenAt))")
                     Text("Last observed: \(date(row.lastSeenAt))")
                     if row.isExpensive {
                         Label("Likely hotspot / expensive", systemImage: "iphone.radiowaves.left.and.right")
+                    }
+                    if row.isConstrained {
+                        Label("Constrained", systemImage: "gauge.with.dots.needle.33percent")
                     }
                 }
                 .font(.callout)
@@ -62,16 +66,21 @@ struct NetworkDetailView: View {
                     Text("Usage trend")
                         .font(.headline)
 
-                    let points = analytics.detailTrend(for: identityKey)
-                    if points.isEmpty {
+                    if detailPoints.isEmpty {
                         ContentUnavailableView("No usage in this period", systemImage: "chart.bar")
                             .frame(minHeight: 220)
                     } else {
-                        Chart(points) { point in
+                        Chart(detailPoints) { point in
                             BarMark(
                                 x: .value("Time", point.intervalStart),
                                 y: .value("Data used", Double(point.totalBytes))
                             )
+
+                            if point.id == peak?.id {
+                                RuleMark(x: .value("Peak", point.intervalStart))
+                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .chartYAxis {
                             AxisMarks { value in
@@ -93,12 +102,20 @@ struct NetworkDetailView: View {
             Spacer()
         }
         .padding(22)
-        .frame(width: 820, height: 650)
+        .frame(width: 900, height: 660)
         .task { loadAlias() }
     }
 
     private var row: NetworkUsageHistoryRow? {
         analytics.detailRow(for: identityKey)
+    }
+
+    private var detailPoints: [UsageTrendPoint] {
+        analytics.detailTrend(for: identityKey)
+    }
+
+    private var peak: UsageTrendPoint? {
+        detailPoints.max { $0.totalBytes < $1.totalBytes }
     }
 
     private func loadAlias() {
@@ -115,7 +132,7 @@ struct NetworkDetailView: View {
         }
     }
 
-    private func metric(_ title: String, _ value: String) -> some View {
+    private func metric(_ title: String, _ value: String, _ detail: String?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
                 .font(.caption)
@@ -123,10 +140,25 @@ struct NetworkDetailView: View {
             Text(value)
                 .font(.title3.weight(.semibold))
                 .lineLimit(1)
+            if let detail {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func identityIcon(for row: NetworkUsageHistoryRow) -> String {
+        switch analytics.identityQuality(for: row) {
+        case .identified: "checkmark.seal"
+        case .partiallyIdentified: "info.circle"
+        case .unknownNetwork: "wifi.exclamationmark"
+        case .trackingDegraded: "exclamationmark.triangle"
+        }
     }
 
     private func bytes(_ value: UInt64) -> String {
