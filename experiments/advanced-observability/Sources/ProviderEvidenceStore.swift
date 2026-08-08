@@ -127,13 +127,16 @@ private enum ApplicationIdentityResolver {
     static func signingIdentifier(from auditToken: Data?) -> String? {
         guard let auditToken, !auditToken.isEmpty else { return nil }
         let attributes = [kSecGuestAttributeAudit as String: auditToken] as CFDictionary
-        var code: SecCode?
-        guard SecCodeCopyGuestWithAttributes(nil, attributes, SecCSFlags(), &code) == errSecSuccess,
-              let code else { return nil }
+        var runningCode: SecCode?
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, SecCSFlags(), &runningCode) == errSecSuccess,
+              let runningCode else { return nil }
+
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(runningCode, SecCSFlags(), &staticCode) == errSecSuccess,
+              let staticCode else { return nil }
 
         var information: CFDictionary?
-        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
-        guard SecCodeCopySigningInformation(code, flags, &information) == errSecSuccess,
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(), &information) == errSecSuccess,
               let dictionary = information as? [String: Any] else { return nil }
         return dictionary[kSecCodeInfoIdentifier as String] as? String
     }
@@ -141,18 +144,22 @@ private enum ApplicationIdentityResolver {
 
 private enum LocalityClassifier {
     static func classify(flow: NEFilterFlow) -> String {
-        guard let socket = flow as? NEFilterSocketFlow,
-              let endpoint = socket.remoteEndpoint else { return "unknown" }
-        guard case let .hostPort(host, _) = endpoint else { return "unknown" }
-        return classify(host: String(describing: host))
+        guard let socket = flow as? NEFilterSocketFlow else { return "unknown" }
+        if let endpoint = socket.remoteEndpoint {
+            return classify(endpointDescription: String(describing: endpoint))
+        }
+        if let hostname = socket.remoteHostname {
+            return classify(endpointDescription: hostname)
+        }
+        return "unknown"
     }
 
-    static func classify(host raw: String) -> String {
-        let host = raw.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        if host == "localhost" || host == "::1" || host.hasPrefix("127.") { return "loopback" }
+    static func classify(endpointDescription raw: String) -> String {
+        let value = raw.lowercased()
+        if value.contains("localhost") || value.contains("::1") { return "loopback" }
 
-        let parts = host.split(separator: ".", omittingEmptySubsequences: false).compactMap { Int($0) }
-        if parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) {
+        if let ipv4 = firstIPv4(in: value), let parts = ipv4Octets(ipv4) {
+            if parts[0] == 127 { return "loopback" }
             if parts[0] == 10 { return "localNetwork" }
             if parts[0] == 172 && (16...31).contains(parts[1]) { return "localNetwork" }
             if parts[0] == 192 && parts[1] == 168 { return "localNetwork" }
@@ -160,8 +167,36 @@ private enum LocalityClassifier {
             return "external"
         }
 
-        if host.hasPrefix("fe8") || host.hasPrefix("fe9") || host.hasPrefix("fea") || host.hasPrefix("feb") || host.hasPrefix("fc") || host.hasPrefix("fd") { return "localNetwork" }
-        if host.contains(":") { return "external" }
+        let ipv6 = bracketedIPv6(in: value) ?? (value.contains("::") ? value : nil)
+        if let ipv6 {
+            if ipv6.contains("::1") { return "loopback" }
+            if ipv6.contains("fe8") || ipv6.contains("fe9") || ipv6.contains("fea") || ipv6.contains("feb") || ipv6.contains("fc") || ipv6.contains("fd") { return "localNetwork" }
+            return "external"
+        }
+
+        // Hostname-only endpoints remain unknown; never perform a DNS lookup only
+        // to produce a classification.
         return "unknown"
+    }
+
+    private static func firstIPv4(in value: String) -> String? {
+        for token in value.split(whereSeparator: { !($0.isNumber || $0 == ".") }) {
+            let candidate = String(token)
+            if ipv4Octets(candidate) != nil { return candidate }
+        }
+        return nil
+    }
+
+    private static func ipv4Octets(_ value: String) -> [Int]? {
+        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return nil }
+        let values = parts.compactMap { Int($0) }
+        guard values.count == 4, values.allSatisfy({ (0...255).contains($0) }) else { return nil }
+        return values
+    }
+
+    private static func bracketedIPv6(in value: String) -> String? {
+        guard let open = value.firstIndex(of: "["), let close = value[open...].firstIndex(of: "]") else { return nil }
+        return String(value[value.index(after: open)..<close])
     }
 }
