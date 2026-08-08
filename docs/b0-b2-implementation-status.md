@@ -4,95 +4,115 @@ Compact status for the Advanced Observability track.
 
 ## B0 — Architecture and entitlement spike
 
-Status: **capability spike implemented; production architecture blocked.**
+Status: **GO for a signed real-Mac prototype; production acceptance still gated.**
 
-Completed:
+Implemented and CI-verified:
 
-- [x] source-app evidence candidate validated in API surface: `NEFilterFlow.sourceAppIdentifier`;
-- [x] deterministic locality contract with first-class `unknown`;
-- [x] Data Provider system-extension target isolated under `experiments/advanced-observability/`;
-- [x] low-frequency statistics report request compiled into the spike;
-- [x] real SDK validation run through GitHub Actions;
-- [x] Filter Data Provider privacy sandbox documented;
-- [x] `NEFilterControlProvider` macOS blocker discovered by compiler and removed from the experiment;
-- [x] content-filter-only production bridge rejected rather than simulated;
-- [x] alternative transparent-proxy / Endpoint Security / packet-filter directions documented as research candidates or rejects.
+- [x] macOS `NEFilterDataProvider` system-extension target;
+- [x] explicit system-extension `main.swift` using `NEProvider.startSystemExtensionMode()`;
+- [x] `sourceAppIdentifier` rejected as unavailable on macOS rather than hidden behind a false abstraction;
+- [x] `sourceAppAuditToken` accepted by the macOS SDK;
+- [x] audit-token → Security Code Signing → signing-identifier resolver;
+- [x] deterministic locality model with first-class `unknown`;
+- [x] low-frequency `NEFilterReport` statistics request;
+- [x] in-memory flow/app/locality aggregation;
+- [x] `NEFilterControlProvider` removed after the real SDK proved it unavailable on macOS;
+- [x] system-extension `NEMachServiceName`;
+- [x] NSXPC listener inside the system extension;
+- [x] main-app NSXPC client;
+- [x] provider returns only aggregate JSON evidence, never packet payload;
+- [x] entire spike builds unsigned in GitHub Actions against the same macOS SDK as the app.
 
-Blocking gate:
+Still required before production acceptance:
 
-- [ ] identify a supported provider-to-main-app evidence channel that preserves source-app evidence without turning the core product into an unnecessary traffic proxy.
-
-Still open after a new architecture is identified:
-
-- [ ] Developer ID entitlement/provisioning;
-- [ ] system-extension activation/approval;
-- [ ] notarized packaging;
+- [ ] embed/sign the provider in a Developer ID development build;
+- [ ] activate/approve it on a real Mac;
+- [ ] configure `NEFilterManager` for socket filtering;
+- [ ] prove XPC runtime connectivity;
+- [ ] validate XPC caller code-signing identity before accepting clients;
+- [ ] real-Mac source-app capability matrix;
+- [ ] byte-reconciliation tests;
+- [ ] VPN/WebKit/helper/system-process coverage;
 - [ ] idle/high-throughput performance budget;
-- [ ] real-Mac capability matrix.
+- [ ] notarized distribution flow.
 
 Authority: `advanced-observability-feasibility.md`.
 
 ## B1 — Minimal app-attribution prototype
 
-Status: **domain + provider capability prototype implemented; end-to-end app attribution blocked by B0.**
+Status: **implementation prototype complete enough for signed real-Mac validation; evidence is not release-validated.**
 
 Implemented:
 
 - [x] `FlowLocality`: loopback / localNetwork / external / unknown;
 - [x] `ApplicationFlowEvidence` and per-application summary models;
-- [x] source-app / locality / byte-capability states;
-- [x] deterministic IP locality classifier with no extra DNS lookup;
+- [x] application/locality/byte-capability provider states;
+- [x] deterministic IP locality classifier with no classification-only DNS lookup;
 - [x] `Unknown application` support;
-- [x] isolated `NEFilterDataProvider` experimental target;
-- [x] data provider requests low-frequency statistics reports while allowing traffic;
-- [x] provider logs source app + byte counts only for development diagnostics;
-- [x] byte values remain `notValidated` by default;
-- [x] stale/incomplete evidence is modeled explicitly;
-- [x] deterministic domain tests for locality, aggregation, bytes and snapshot serialization.
+- [x] audit-token signing-identifier resolution inside the provider;
+- [x] flow registration by stable `NEFilterFlow.identifier`;
+- [x] low-frequency statistics reports while traffic is allowed;
+- [x] cumulative-report → per-flow delta accounting;
+- [x] per-locality byte accumulation;
+- [x] in-memory aggregation before provider → app IPC;
+- [x] XPC JSON snapshot contract matching main-app domain models;
+- [x] main app prefers XPC evidence when available;
+- [x] stale provider snapshots become `degraded`;
+- [x] bytes remain `notValidated` by default;
+- [x] deterministic domain tests for locality, aggregation, byte fields and snapshot serialization.
 
-Not implemented / not claimed:
+Real-Mac acceptance remains open:
 
-- [ ] supported provider → app runtime bridge;
-- [ ] durable real per-app history;
-- [ ] validated application byte accounting;
-- [ ] validated source-app accuracy matrix;
-- [ ] validated VPN/WebKit/helper behavior.
+- [ ] signing identifier agrees with controlled source applications;
+- [ ] localhost/LAN/external classes agree with controlled destinations;
+- [ ] statistics byte deltas reconcile with controlled transfers;
+- [ ] no double counting across report updates;
+- [ ] XPC reconnect behaves across provider/app restart;
+- [ ] WebKit/helper/VPN/system traffic limitations are documented;
+- [ ] unobservable cases remain explicit.
 
-A development-only prototype snapshot reader exists so B2 UI state can be tested deterministically. It is explicitly not presented as Network Extension IPC.
+There is still no durable per-app history in SwiftData. That should be added only after the live evidence source passes these gates.
 
 ## B2 — Advanced Observability product mode
 
-Status: **experimental UI/product scaffolding implemented; real provider data intentionally unavailable in normal builds.**
+Status: **opt-in product surface implemented; signed-provider activation and real data validation remain open.**
 
 Implemented:
 
 - [x] dedicated `Applications` section shown only after explicit opt-in;
 - [x] Disabled / Provider unavailable / Awaiting approval / Active / Degraded states;
-- [x] Applications table with Local / External / Unknown flow evidence;
-- [x] application detail view and evidence-boundary copy;
-- [x] byte totals only become authoritative when capability is `validated`;
+- [x] Applications table with Local / External / Unknown flow counts;
+- [x] per-application detail view;
+- [x] byte values withheld from authoritative presentation while capability is `notValidated`;
 - [x] Advanced Observability Settings section;
+- [x] provider/bridge/byte-accounting status visible to the user;
+- [x] system-extension XPC is the preferred evidence path;
+- [x] developer file snapshot exists only as deterministic UI fallback;
 - [x] core Analytics and Monitor remain fully usable with advanced mode off;
-- [x] no fake sample applications are injected into normal builds;
-- [x] normal ad-hoc CI build reports provider unavailable rather than pretending activation.
+- [x] no fake application rows are injected into normal builds;
+- [x] normal ad-hoc CI build reports provider unavailable rather than pretending system-extension activation;
+- [x] brand system applied to app shell, menu bar, accent and advanced-status surfaces.
 
-Blocked before production B2:
+Still blocked before production B2:
 
-- [ ] B0 provider-to-app architecture;
-- [ ] signed provider activation UX;
-- [ ] real per-app data persistence;
+- [ ] signed provider installation/approval action in the shipping build;
+- [ ] `NEFilterManager` enable/disable lifecycle;
+- [ ] real per-app persisted buckets after B1 validation;
 - [ ] advanced retention/reset controls;
+- [ ] secure XPC caller validation;
 - [ ] accessibility/usability pass with real provider states;
-- [ ] performance and network-safety validation.
+- [ ] performance/network-safety validation;
+- [ ] final distribution/notarization path.
 
 ## Claim boundary
 
 Safe branch claim:
 
-> Traffic Monitoring includes an experimental Advanced Observability UI, domain model, and macOS Filter Data Provider capability spike. B0 found that the current Content Filter architecture cannot yet deliver provider evidence to the main app through a supported channel, so normal builds do not claim real per-app analytics.
+> Traffic Monitoring now contains an opt-in Advanced Observability prototype: a macOS Filter Data Provider system extension, audit-token application identity path, local/external/unknown classification, aggregate flow statistics, an XPC bridge, and an Applications UI. The complete source builds in CI, but real per-app evidence remains experimental until a signed system extension is activated and validated on a Mac.
 
 Unsafe claims:
 
-- `Traffic Monitoring measures per-app traffic in the downloadable build.`
+- `Traffic Monitoring measures validated per-app traffic in the downloadable ad-hoc build.`
 - `Traffic Monitoring verifies that an app is local-only.`
 - `Application byte totals are validated.`
+- `No external traffic` without complete provider coverage and the later audit semantics gate.
