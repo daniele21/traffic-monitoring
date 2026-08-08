@@ -30,6 +30,7 @@ public struct EvidenceExportNetwork: Codable, Sendable, Equatable {
     public let uploadedBytes: UInt64
     public let totalBytes: UInt64
     public let isExpensive: Bool
+    public let isConstrained: Bool
     public let identityQuality: EvidenceQuality
     public let firstObservedAt: Date
     public let lastObservedAt: Date
@@ -42,6 +43,7 @@ public struct EvidenceExportNetwork: Codable, Sendable, Equatable {
         uploadedBytes = row.uploadedBytes
         totalBytes = row.totalBytes
         isExpensive = row.isExpensive
+        isConstrained = row.isConstrained
         identityQuality = NetworkIdentityQuality.quality(
             identityKey: row.identityKey,
             connectionKind: row.connectionKind,
