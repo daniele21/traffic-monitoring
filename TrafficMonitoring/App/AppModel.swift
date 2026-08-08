@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
     let diagnostics: DiagnosticsViewModel
     let locationAuthorization = LocationAuthorizationController()
     let advancedObservability = AdvancedObservabilityController()
+    let advancedObservabilityInstaller = AdvancedObservabilityInstaller()
 
     init() {
         let store = LocalUsageStore.makeDefault()
@@ -15,7 +16,14 @@ final class AppModel: ObservableObject {
         diagnostics = DiagnosticsViewModel(usageStore: store)
     }
 
-    func start() { diagnostics.start(); advancedObservability.start() }
-    func stop() { advancedObservability.stop(); diagnostics.stop() }
+    func start() {
+        diagnostics.start()
+        advancedObservability.start()
+    }
+
+    func stop() {
+        advancedObservability.stop()
+        diagnostics.stop()
+    }
 }
 #endif
