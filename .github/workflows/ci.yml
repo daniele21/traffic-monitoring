@@ -25,6 +25,12 @@ jobs:
       - name: Swift core tests
         run: swift test
 
+      - name: Validate Advanced Observability security tooling
+        run: |
+          set -euo pipefail
+          bash -n scripts/verify-signed-advanced-observability.sh
+          swiftc scripts/advanced-observability-xpc-probe.swift -o "$RUNNER_TEMP/advanced-observability-xpc-probe"
+
       - name: Xcode build and tests
         run: |
           set -o pipefail
