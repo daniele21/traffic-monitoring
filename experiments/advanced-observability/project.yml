@@ -23,26 +23,8 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
 
-  TrafficMonitoringFilterControlProvider:
-    type: app-extension
-    platform: macOS
-    sources:
-      - path: Sources/FilterControlProvider.swift
-    dependencies:
-      - sdk: NetworkExtension.framework
-      - sdk: Network.framework
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.control
-        PRODUCT_NAME: TrafficMonitoringFilterControlProvider
-        INFOPLIST_FILE: ControlInfo.plist
-        CODE_SIGN_ENTITLEMENTS: TrafficMonitoringFilterControl.entitlements
-        GENERATE_INFOPLIST_FILE: NO
-        SKIP_INSTALL: YES
-
 schemes:
   AdvancedObservabilitySpike:
     build:
       targets:
         TrafficMonitoringFilterDataProvider: all
-        TrafficMonitoringFilterControlProvider: all
