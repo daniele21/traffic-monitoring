@@ -97,21 +97,13 @@ final class DiagnosticsViewModel: ObservableObject {
                 )
 
                 let included = isIncluded(classification)
-                if included {
-                    switch classification {
-                    case .wifi:
-                        if context.wifiSSIDByInterface[reading.interfaceName] == nil {
-                            metadataDegraded = true
-                            unknownNetwork = true
-                        }
-                    case .wired:
-                        // v1 wired identity intentionally falls back to interface-level identity.
-                        metadataDegraded = true
-                    case .otherPhysical:
-                        metadataDegraded = true
-                    case .excluded:
-                        break
-                    }
+
+                // An active Wi-Fi interface without SSID is an identity-quality issue even while idle.
+                if included,
+                   case .wifi = classification,
+                   context.wifiSSIDByInterface[reading.interfaceName] == nil {
+                    metadataDegraded = true
+                    unknownNetwork = true
                 }
 
                 if included, !contextChanged, let previous = previousByInterface[reading.interfaceName] {
@@ -119,6 +111,18 @@ final class DiagnosticsViewModel: ObservableObject {
                     case let .accepted(value):
                         delta = value
                         let kind = connectionKind(for: classification)
+
+                        // Wired/other fallback identities only degrade evidence when they actually
+                        // contribute traffic. Merely-present zero-byte interfaces should not lower
+                        // the evidence quality for the whole selected period.
+                        if value.totalBytes > 0 {
+                            switch classification {
+                            case .wired, .otherPhysical:
+                                metadataDegraded = true
+                            case .wifi, .excluded:
+                                break
+                            }
+                        }
 
                         sessionAccumulator.record(
                             identityKey: identity,
