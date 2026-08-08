@@ -56,15 +56,40 @@ public struct ApplicationEvidenceSummary: Identifiable, Codable, Sendable, Equat
     }
 }
 
+/// Aggregate-only provider snapshot transported over the Advanced Observability
+/// XPC bridge. Optional diagnostic fields preserve decoding compatibility with
+/// earlier prototype snapshots and intentionally contain no endpoint/payload data.
 public struct AdvancedObservabilitySnapshot: Codable, Sendable, Equatable {
     public let providerState: AdvancedObservabilityProviderState
     public let byteAccounting: ByteAccountingCapability
     public let applications: [ApplicationEvidenceSummary]
     public let lastObservedAt: Date?
     public let generatedAt: Date
+    public let protocolVersion: Int?
+    public let providerStartedAt: Date?
+    public let activeFlowCount: Int?
+    public let observedFlowCount: Int?
 
-    public init(providerState: AdvancedObservabilityProviderState, byteAccounting: ByteAccountingCapability, applications: [ApplicationEvidenceSummary], lastObservedAt: Date?, generatedAt: Date = Date()) {
-        self.providerState = providerState; self.byteAccounting = byteAccounting; self.applications = applications; self.lastObservedAt = lastObservedAt; self.generatedAt = generatedAt
+    public init(
+        providerState: AdvancedObservabilityProviderState,
+        byteAccounting: ByteAccountingCapability,
+        applications: [ApplicationEvidenceSummary],
+        lastObservedAt: Date?,
+        generatedAt: Date = Date(),
+        protocolVersion: Int? = nil,
+        providerStartedAt: Date? = nil,
+        activeFlowCount: Int? = nil,
+        observedFlowCount: Int? = nil
+    ) {
+        self.providerState = providerState
+        self.byteAccounting = byteAccounting
+        self.applications = applications
+        self.lastObservedAt = lastObservedAt
+        self.generatedAt = generatedAt
+        self.protocolVersion = protocolVersion
+        self.providerStartedAt = providerStartedAt
+        self.activeFlowCount = activeFlowCount
+        self.observedFlowCount = observedFlowCount
     }
 }
 
