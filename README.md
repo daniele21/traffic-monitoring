@@ -1,34 +1,61 @@
 # Traffic Monitoring
 
-A privacy-first macOS menu-bar app for measuring network-interface traffic over time and understanding **where** that traffic was used.
+A lightweight, privacy-first macOS menu-bar app for measuring network-interface traffic and attributing usage to the network context where it occurred.
 
-The app is designed to continuously record download/upload usage across Wi-Fi, Personal Hotspot, Ethernet, and other supported physical connections, then provide historical analytics grouped by network and period.
+The app continuously records download/upload usage across Wi-Fi, Personal Hotspot, Ethernet, and other supported physical connections. Historical persistence and analytics are planned after the measurement layer is validated on real macOS networks.
 
-## Planned v1
+## Current development state
 
-- native Swift/SwiftUI macOS app;
-- menu-bar live network usage;
-- persistent download/upload history;
-- traffic attribution by Wi-Fi network / wired connection context;
-- likely Personal Hotspot identification through connection metadata;
-- Today / 7D / 30D / Month analytics;
-- usage-over-time charts;
-- usage ranking by network;
-- local network aliases;
-- fully local storage;
-- graceful operation when Wi-Fi SSID permission is denied;
-- VPN-safe physical-interface accounting to avoid double counting;
-- launch at login.
+The repository is implementing **M0 — Project bootstrap** and **M1 — Measurement feasibility** from `docs/implementation-plan.md`.
+
+Implemented in the first development slice:
+
+- native SwiftUI macOS app skeleton;
+- menu-bar utility and analytics/diagnostic window;
+- public-API Darwin interface counter reader;
+- CoreWLAN Wi-Fi interface/SSID enrichment;
+- `NWPathMonitor` path metadata (`isExpensive`, `isConstrained`);
+- physical/virtual interface classification;
+- safe cumulative-counter delta calculation;
+- diagnostic table with raw counters and live deltas;
+- deterministic Swift core tests;
+- macOS GitHub Actions build/test workflow.
+
+Persistence and historical analytics are intentionally deferred until the M1 real-network validation gate passes.
+
+## Generate and open the Xcode project
+
+The project definition is kept in `project.yml` so the generated Xcode project does not become a large, noisy source-of-truth file.
+
+```bash
+brew install xcodegen
+xcodegen generate
+open TrafficMonitoring.xcodeproj
+```
+
+Run the `TrafficMonitoring` scheme on macOS 14+.
+
+The app runs as an `LSUIElement` menu-bar utility. Use **Open Analytics** from the menu-bar popover to open the current diagnostic surface.
+
+## Core tests
+
+Platform-independent tracking primitives can be tested with Swift Package Manager:
+
+```bash
+swift test
+```
+
+The package test harness intentionally compiles only `Domain/` and `Tracking/`, keeping counter/delta semantics deterministic and testable without live networking.
 
 ## Measurement scope
 
-Traffic Monitoring measures bytes transferred by the Mac's physical network interfaces while the app is running. It does **not** inspect packet contents, websites, DNS queries, or browsing history.
+Traffic Monitoring measures bytes transferred by the Mac's physical network interfaces while the app is running. It does **not** inspect packet contents, websites, DNS queries, destinations, or browsing history.
 
-Because interface counters can include local-network traffic, totals should be understood as **network usage**, not guaranteed carrier/ISP billing usage.
+Because interface counters can include local-network traffic, totals are **network usage**, not guaranteed carrier/ISP billing usage.
 
 ## Documentation
 
-The project documentation uses progressive disclosure so developers and coding agents do not need to load the full architecture for every task.
+The documentation uses progressive disclosure so developers and coding agents do not need to load the full architecture for every task.
 
 Start with:
 
@@ -45,9 +72,3 @@ Focused documents:
 - [`docs/ux.md`](docs/ux.md)
 - [`docs/testing.md`](docs/testing.md)
 - [`docs/decisions.md`](docs/decisions.md)
-
-## Current status
-
-Planning and architecture defined. Implementation starts with **M0 — Project bootstrap**, followed by the **M1 measurement feasibility spike**. The measurement layer must be validated before persistence and dashboard work proceed.
-
-See [`docs/implementation-plan.md`](docs/implementation-plan.md) for acceptance gates and task checklists.
