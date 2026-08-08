@@ -11,19 +11,24 @@ struct MenuBarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(diagnostics.currentNetworkName)
                     .font(.headline)
-                Text("Live interface usage")
+                Text("Connected now")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            LabeledContent("Download") {
+            LabeledContent("Download now") {
                 Text(rate(diagnostics.totalDownloadBytesPerSecond))
                     .monospacedDigit()
             }
-            LabeledContent("Upload") {
+            LabeledContent("Upload now") {
                 Text(rate(diagnostics.totalUploadBytesPerSecond))
+                    .monospacedDigit()
+            }
+            LabeledContent("Used since opening") {
+                Text(bytes(diagnostics.sessionTotalBytes))
+                    .fontWeight(.semibold)
                     .monospacedDigit()
             }
 
@@ -41,12 +46,16 @@ struct MenuBarView: View {
             Button("Quit") { NSApp.terminate(nil) }
         }
         .padding(10)
-        .frame(width: 260)
+        .frame(width: 280)
+    }
+
+    private func bytes(_ value: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .decimal)
     }
 
     private func rate(_ bytesPerSecond: Double) -> String {
-        let bytes = Int64(clamping: UInt64(max(0, bytesPerSecond.rounded())))
-        return "\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .decimal))/s"
+        let value = UInt64(max(0, bytesPerSecond.rounded()))
+        return "\(bytes(value))/s"
     }
 }
 #endif
