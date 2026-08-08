@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var locationAuthorization: LocationAuthorizationController
     @ObservedObject var advancedObservability: AdvancedObservabilityController
     @ObservedObject var advancedObservabilityInstaller: AdvancedObservabilityInstaller
+    @State private var showAdvancedEnableConfirmation = false
 
     var body: some View {
         Form {
@@ -51,8 +52,7 @@ struct SettingsView: View {
 
                 HStack {
                     Button("Install & Enable Advanced Observability") {
-                        advancedObservability.setEnabled(true)
-                        advancedObservabilityInstaller.activateAndEnable()
+                        showAdvancedEnableConfirmation = true
                     }
                     .disabled(isInstallationBusy)
 
@@ -71,6 +71,10 @@ struct SettingsView: View {
                 Text("Advanced Observability is optional and separate from normal traffic tracking. When enabled with a properly signed build, macOS activates a Network Extension system component that reports aggregate source-application and local/external/unknown flow evidence. Packet payloads and browsing content are not stored or sent to the app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Label("macOS allows one active content-filter configuration at a time. Enabling this experimental mode can disable another content filter already active on the Mac. Traffic Monitoring asks before doing so and core Analytics never requires this mode.", systemImage: "exclamationmark.shield")
+                    .font(.caption)
+                    .foregroundStyle(BrandTheme.warning)
 
                 if advancedObservabilityInstaller.state == .awaitingUserApproval {
                     Label("macOS is waiting for approval. Follow the System Settings prompt, then return here; activation continues automatically after approval.", systemImage: "person.badge.clock")
@@ -98,7 +102,20 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 680, height: 720)
+        .frame(width: 700, height: 750)
+        .confirmationDialog(
+            "Enable Advanced Observability?",
+            isPresented: $showAdvancedEnableConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Install & Enable") {
+                advancedObservability.setEnabled(true)
+                advancedObservabilityInstaller.activateAndEnable()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("macOS may ask you to approve the Traffic Monitoring system extension. Enabling its content filter can disable another content filter currently active on this Mac. Normal Traffic Monitoring analytics do not need this feature.")
+        }
     }
 
     private var isInstallationBusy: Bool {
