@@ -22,7 +22,7 @@ final class LocationAuthorizationController: NSObject, ObservableObject, CLLocat
     }
 
     var isAuthorized: Bool {
-        status == .authorized || status == .authorizedAlways || status == .authorizedWhenInUse
+        status == .authorizedAlways || status == .authorizedWhenInUse
     }
 
     var statusLabel: String {
