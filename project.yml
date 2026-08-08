@@ -20,6 +20,7 @@ targets:
         PRODUCT_NAME: TrafficMonitoring
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_NSLocationUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
         ENABLE_APP_SANDBOX: NO
         MARKETING_VERSION: 0.1.0
