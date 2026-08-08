@@ -17,6 +17,15 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. `data-and-analytics.md` for persistence/coverage semantics
 4. `evidence-export.md` for JSON/CSV schema work
 
+### Reviewing B0–B2 Advanced Observability
+
+1. `b0-b2-implementation-status.md`
+2. `advanced-observability-feasibility.md` for the current macOS platform result
+3. `adr/0001-advanced-observability-content-filter.md` only when revisiting the architecture decision
+4. `local-first-observability-plan.md` for the broader roadmap
+
+The current B0 result blocks production app-level evidence from the Content Filter architecture. B1 domain/UI scaffolding may be developed and tested, but no agent may present the normal app as receiving real provider evidence until a supported macOS handoff architecture passes a new gate.
+
 ### Running the app without Xcode
 
 1. `run-without-xcode.md`
@@ -32,12 +41,10 @@ The documentation is organized for progressive disclosure: start with the smalle
 ### Planning advanced observability
 
 1. `../AGENTS.md`
-2. `positioning.md`
-3. `local-first-observability-plan.md`
-4. `architecture.md` only when an accepted feasibility decision changes boundaries
-5. `decisions.md` when recording a platform choice
-
-Do not begin per-app attribution or locality-classification implementation before the B0 feasibility gate in `local-first-observability-plan.md` is documented as accepted.
+2. `b0-b2-implementation-status.md`
+3. `advanced-observability-feasibility.md`
+4. `positioning.md` only if claims are changing
+5. `local-first-observability-plan.md` only for the broader staged roadmap
 
 ### Changing evidence quality / coverage
 
@@ -65,12 +72,13 @@ Do not begin per-app attribution or locality-classification implementation befor
 3. `data-and-analytics.md` only if persistence or attribution changes
 4. `decisions.md` only when revisiting an architectural choice
 
-### Changing the UI
+### Changing the UI / brand
 
 1. `../AGENTS.md`
-2. `ux.md`
-3. `data-and-analytics.md` only for metrics/query semantics
-4. `positioning.md` if user-facing labels change the product claim
+2. `brand.md` for visual identity
+3. `ux.md` for information architecture
+4. `data-and-analytics.md` only for metrics/query semantics
+5. `positioning.md` if user-facing labels change the product claim
 
 ### Reviewing current product scope
 
@@ -85,6 +93,10 @@ Do not begin per-app attribution or locality-classification implementation befor
 - `positioning.md` — authoritative positioning, ecosystem role, audiences, messaging, claims, and evidence levels.
 - `local-first-observability-plan.md` — detailed phased evolution from network-level analytics toward optional app attribution, locality evidence, audits, and developer tooling.
 - `a0-a2-implementation-status.md` — compact implementation/status view for repository positioning, evidence quality, and export.
+- `b0-b2-implementation-status.md` — compact current status of Advanced Observability implementation and blockers.
+- `advanced-observability-feasibility.md` — B0 macOS feasibility result and evidence-source constraints.
+- `adr/0001-advanced-observability-content-filter.md` — decision not to promote the current Content Filter spike into the production provider architecture.
+- `brand.md` — approved visual identity, palette, typography, product language, and chart styling.
 
 ### Current product
 
@@ -108,8 +120,11 @@ When documents overlap:
 - current feature scope → `product-spec.md`;
 - current engineering execution → `implementation-plan.md`;
 - A0–A2 implementation status → `a0-a2-implementation-status.md`;
+- B0–B2 current status → `b0-b2-implementation-status.md`;
+- B0 platform feasibility → `advanced-observability-feasibility.md`;
 - export schema → `evidence-export.md`;
 - future app/locality/audit evolution → `local-first-observability-plan.md`;
+- visual identity → `brand.md`;
 - technical behavior → the focused architecture/tracking/data document.
 
 ## Documentation rule
