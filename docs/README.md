@@ -10,6 +10,13 @@ The documentation is organized for progressive disclosure: start with the smalle
 2. `product-spec.md` only for current product scope
 3. `local-first-observability-plan.md` only for future app/locality/audit evolution
 
+### Reviewing A0–A2 status
+
+1. `a0-a2-implementation-status.md`
+2. `positioning.md` only if public claims are involved
+3. `data-and-analytics.md` for persistence/coverage semantics
+4. `evidence-export.md` for JSON/CSV schema work
+
 ### Running the app without Xcode
 
 1. `run-without-xcode.md`
@@ -31,6 +38,20 @@ The documentation is organized for progressive disclosure: start with the smalle
 5. `decisions.md` when recording a platform choice
 
 Do not begin per-app attribution or locality-classification implementation before the B0 feasibility gate in `local-first-observability-plan.md` is documented as accepted.
+
+### Changing evidence quality / coverage
+
+1. `../AGENTS.md`
+2. `data-and-analytics.md`
+3. `a0-a2-implementation-status.md`
+4. `testing.md`
+
+### Changing evidence export
+
+1. `../AGENTS.md`
+2. `evidence-export.md`
+3. `data-and-analytics.md` only if underlying metrics change
+4. `positioning.md` only if the export changes the claim boundary
 
 ### Validating the current tracker on a real Mac
 
@@ -63,6 +84,7 @@ Do not begin per-app attribution or locality-classification implementation befor
 
 - `positioning.md` — authoritative positioning, ecosystem role, audiences, messaging, claims, and evidence levels.
 - `local-first-observability-plan.md` — detailed phased evolution from network-level analytics toward optional app attribution, locality evidence, audits, and developer tooling.
+- `a0-a2-implementation-status.md` — compact implementation/status view for repository positioning, evidence quality, and export.
 
 ### Current product
 
@@ -71,7 +93,8 @@ Do not begin per-app attribution or locality-classification implementation befor
 - `tracking-engine.md` — interface enumeration, byte counters, network identity, transitions, VPN, sleep/wake.
 - `m1-validation.md` — compact real-Mac checklist for measurement feasibility/reliability.
 - `run-without-xcode.md` — download and launch the CI-built `.app` on a Mac without full Xcode.
-- `data-and-analytics.md` — SwiftData entities, buckets, local persistence, and analytics queries.
+- `data-and-analytics.md` — SwiftData entities, buckets, evidence coverage, local persistence, and analytics queries.
+- `evidence-export.md` — versioned JSON/CSV network-evidence export contract and privacy boundary.
 - `ux.md` — menu-bar and dashboard information architecture.
 - `implementation-plan.md` — current lightweight product delivery plan with acceptance gates.
 - `testing.md` — unit/integration/manual validation strategy.
@@ -84,6 +107,8 @@ When documents overlap:
 - positioning/public claims → `positioning.md`;
 - current feature scope → `product-spec.md`;
 - current engineering execution → `implementation-plan.md`;
+- A0–A2 implementation status → `a0-a2-implementation-status.md`;
+- export schema → `evidence-export.md`;
 - future app/locality/audit evolution → `local-first-observability-plan.md`;
 - technical behavior → the focused architecture/tracking/data document.
 
