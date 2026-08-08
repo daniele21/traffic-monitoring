@@ -18,16 +18,16 @@ This document defines the v1 menu-bar and analytics experience. It does not defi
 Menu bar
   ├─ Connected now
   ├─ Download now / Upload now
-  ├─ Used since opening / period totals
+  ├─ Used since opening
   ├─ Open Analytics
   ├─ Settings
   └─ Quit
 
 Analytics window
   ├─ Analytics
-  │   ├─ Total used / Downloaded / Uploaded
-  │   ├─ Usage by network
-  │   └─ Network detail
+  │   ├─ Overview
+  │   ├─ Trend
+  │   └─ Networks
   └─ Monitor
       └─ Technical interface diagnostics
 
@@ -95,11 +95,9 @@ Do not put multiple changing values into the menu-bar title by default.
 
 ## Menu-bar popover
 
-Suggested hierarchy:
+Current hierarchy:
 
 ```text
-Network Usage
-
 Connected now
 Home Wi-Fi
 
@@ -107,14 +105,13 @@ Download now       2.3 MB/s
 Upload now         180 kB/s
 Used since opening 1.42 GB
 
-Today              3.81 GB
-This month         18.7 GB
-
 [ Open Analytics ]
 
 Settings…
 Quit
 ```
+
+Period totals remain primarily in Analytics until the persistence UX is validated on real networks.
 
 When `isExpensive == true`, add a restrained metadata badge such as `Likely hotspot`; do not make an absolute carrier claim.
 
@@ -133,8 +130,24 @@ with a secondary action such as `Enable Wi-Fi identification…` if Location per
 
 - title: `Network Usage`;
 - default section: `Analytics`;
-- secondary section: `Monitor`;
-- once persistence is enabled, period picker: Today / 7 days / 30 days / This month / Custom.
+- secondary section: `Monitor`.
+
+Inside Analytics, use three user-facing views:
+
+- `Overview` — cumulative totals and the most-used networks;
+- `Trend` — usage over time, network filtering, and peak periods;
+- `Networks` — full comparison table across detected networks.
+
+The time-period selector is shared across analytics views:
+
+- `Today`
+- `7 days`
+- `30 days`
+- `This month`
+- `All time`
+- `Custom`
+
+`Custom` exposes direct `From` and `To` date controls.
 
 ### Summary cards
 
@@ -145,26 +158,59 @@ Four clear values are allowed when useful:
 - `Uploaded`;
 - `Networks used`.
 
-Once persistent analytics are available, `Networks used` can move out if a more useful period metric replaces it.
+In Trend, replace `Networks used` with the selected period's peak metric when useful:
 
-### Usage over time
+- `Highest usage hour` for Today;
+- `Highest usage day` for longer periods.
 
-Use Swift Charts once persistent time buckets are available.
+### Overview
 
-Default series:
+Overview should answer, without interaction:
 
-- stacked or grouped download/upload bars for daily/hourly usage; or
-- total bars with download/upload available as a display toggle.
+- how much data was used in the selected period?
+- how much was download vs upload?
+- how many networks contributed?
+- which networks consumed the most?
+- is history actually being saved locally?
 
-Prefer bars for transferred volume. A line chart visually suggests a continuous rate and is less appropriate for interval totals unless explicitly showing throughput.
+Current supporting labels include:
 
-Chart tooltip/selection should show:
+- `Most used networks`
+- `Saved locally`
+
+The local-storage status is intentionally visible while persistence is still being validated so a storage failure cannot silently look like durable history.
+
+### Usage trend
+
+Use Swift Charts backed by persisted usage buckets.
+
+The current chart uses transferred-volume bars rather than a throughput line. This keeps the meaning clear: bar height represents data used in that hour/day, not instantaneous network speed.
+
+Trend supports:
+
+- all networks together;
+- one selected network;
+- hourly points for Today;
+- daily points for longer periods;
+- a visible peak marker;
+- a `Largest network spike` callout identifying the network responsible for the largest individual network/time interval.
+
+When all networks are shown, keep each network visually distinguishable and provide a legend.
+
+Preferred peak copy:
 
 ```text
-8 Aug
-Total used 3.4 GB
-Downloaded 2.9 GB
-Uploaded 0.5 GB
+Highest usage hour
+3.4 GB
+8 Aug, 14:00
+```
+
+or:
+
+```text
+Highest usage day
+18.2 GB
+8 Aug 2026
 ```
 
 ### Usage by network
@@ -174,25 +220,29 @@ Rank descending by total bytes.
 Columns/row content:
 
 ```text
-Network            Connection   Downloaded   Uploaded   Total used   Share
-Home               Wi-Fi        12.1 GB      1.9 GB     14.0 GB      46%
-iPhone             Wi-Fi         8.8 GB      1.2 GB     10.0 GB      33%
-Office LAN         Ethernet      5.7 GB      0.5 GB      6.2 GB      20%
+Network            Connection   Downloaded   Uploaded   Total used   Share   Last active
+Home               Wi-Fi        12.1 GB      1.9 GB     14.0 GB      46%     8 Aug
+Phone hotspot      Wi-Fi         8.8 GB      1.2 GB     10.0 GB      33%     7 Aug
+Office LAN         Ethernet      5.7 GB      0.5 GB      6.2 GB      20%     6 Aug
 ```
 
 On narrow layouts, keep only Network + Total used + Share and reveal detail on selection.
 
-A small badge can identify `Likely hotspot` only when the underlying context supports that wording.
+A small badge can identify `Likely hotspot / expensive` only when the underlying context supports that wording.
 
-## Current M1 analytics scaffold
+## Current persistent analytics implementation
 
-Before persistent history is enabled, the analytics screen may show an in-memory validation summary grouped by network identity. It must be explicitly labeled as data **since the app was opened** and must not imply that Today/Month history survives a relaunch.
+Persistent analytics are now enabled in the development build.
 
-This scaffold exists to validate that accepted deltas are attributed to the expected Wi-Fi/network identity before persistence is built. It does not satisfy the M5 analytics milestone.
+The analytics views read local SwiftData history rather than only the current process session. Accepted traffic is accumulated into short time buckets and periodically checkpointed; see `data-and-analytics.md` for the exact storage semantics.
+
+This implementation enables real testing of cumulative history across app relaunches, network changes, timeframes, trend aggregation, and per-network totals. It does **not** mean the full analytics/reliability milestones are accepted yet: the real-network M1 validation matrix, sleep/wake hardening, login launch, and remaining session-detail behavior are still pending.
+
+If Wi-Fi identification permission is unavailable, usage remains counted but generic unnamed Wi-Fi history cannot safely be split or retroactively reassigned to named SSIDs.
 
 ## Network detail
 
-Selecting a network opens a detail destination/sheet containing:
+Selecting a network should eventually open a detail destination/sheet containing:
 
 - display alias;
 - underlying SSID/connection identity when available;
@@ -204,11 +254,13 @@ Selecting a network opens a detail destination/sheet containing:
 - first/last seen metadata;
 - rename action.
 
+The current implementation provides network filtering in Trend and network comparison in Networks; a dedicated detail destination, session count/duration, and rename action remain pending.
+
 For `ssid-unavailable` profiles, explain that historical traffic cannot safely be retroactively assigned to a named Wi-Fi network.
 
 ## Filters
 
-v1 filters:
+Currently implemented:
 
 ### Period
 
@@ -216,12 +268,15 @@ v1 filters:
 - 7 days
 - 30 days
 - This month
+- All time
 - Custom
 
 ### Network
 
 - All networks
-- one or more profiles if UI complexity remains reasonable
+- one selected network in Trend
+
+Planned v1 filters after the current analytics surface is validated:
 
 ### Connection type
 
@@ -328,6 +383,9 @@ Preferred product-facing terms:
 - `Network Usage`
 - `Analytics`
 - `Monitor`
+- `Overview`
+- `Trend`
+- `Networks`
 - `Connected now`
 - `Download now`
 - `Upload now`
@@ -335,7 +393,12 @@ Preferred product-facing terms:
 - `Downloaded`
 - `Uploaded`
 - `Used since opening`
+- `Usage trend`
+- `Highest usage hour`
+- `Highest usage day`
+- `Largest network spike`
 - `Usage by network`
+- `Saved locally`
 - `Wi-Fi network`
 - `Likely hotspot` only when uncertainty is clear
 
