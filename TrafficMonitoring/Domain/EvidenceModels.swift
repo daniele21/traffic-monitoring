@@ -18,9 +18,9 @@ public enum EvidenceQuality: String, Codable, CaseIterable, Sendable, Equatable 
     public var explanation: String {
         switch self {
         case .identified:
-            "Observed usage is associated with identified network contexts for this period."
+            "Observed usage is associated with identified network contexts and the selected interval has no known observation gaps."
         case .partiallyIdentified:
-            "Some usage was measured correctly but could not be tied to a fully identified network context."
+            "Some of the selected period was not observed or some measured usage could not be tied to a fully identified network context."
         case .unknownNetwork:
             "Some Wi-Fi or network usage was measured without a reliable network name or identity."
         case .trackingDegraded:
@@ -87,7 +87,7 @@ public struct EvidenceCoverageSummary: Sendable, Equatable {
     public var quality: EvidenceQuality {
         if trackingDegradedSeconds > 0 { return .trackingDegraded }
         if unknownNetworkSeconds > 0 { return .unknownNetwork }
-        if metadataDegradedSeconds > 0 { return .partiallyIdentified }
+        if metadataDegradedSeconds > 0 || unobservedSeconds > 1 { return .partiallyIdentified }
         return .identified
     }
 
