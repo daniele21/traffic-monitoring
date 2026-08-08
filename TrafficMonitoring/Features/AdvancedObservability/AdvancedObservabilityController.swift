@@ -12,12 +12,12 @@ final class AdvancedObservabilityController: ObservableObject {
     @Published private(set) var lastError: String?
 
     private let defaults: UserDefaults
-    private let bridge: AdvancedObservabilityBridgeStore
+    private let prototypeBridge: AdvancedObservabilityPrototypeBridge
     private var timer: Timer?
 
-    init(defaults: UserDefaults = .standard, bridge: AdvancedObservabilityBridgeStore = AdvancedObservabilityBridgeStore()) {
+    init(defaults: UserDefaults = .standard, prototypeBridge: AdvancedObservabilityPrototypeBridge = AdvancedObservabilityPrototypeBridge()) {
         self.defaults = defaults
-        self.bridge = bridge
+        self.prototypeBridge = prototypeBridge
         isEnabled = defaults.bool(forKey: Self.enabledDefaultsKey)
         snapshot = AdvancedObservabilitySnapshot(providerState: .disabled, byteAccounting: .notValidated, applications: [], lastObservedAt: nil)
         refresh()
@@ -34,15 +34,15 @@ final class AdvancedObservabilityController: ObservableObject {
         case .disabled:
             "Advanced app-level observation is off. Normal network analytics continue unchanged."
         case .providerUnavailable:
-            "The signed Network Extension provider is not available to this build. Core network tracking continues normally."
+            "The current macOS content-filter spike can observe app flow metadata inside its provider, but B0 found no supported provider-to-app evidence channel for this product architecture. Core tracking remains available."
         case .awaitingApproval:
-            "macOS approval is still required before app-level flow evidence can be observed."
+            "A future supported advanced provider would still require macOS approval before observation can start."
         case .active:
             byteAccounting == .validated
-                ? "Application attribution is active with validated byte accounting."
-                : "Application attribution is active. Byte accounting is still experimental and is not presented as authoritative."
+                ? "Prototype application evidence is active with validated byte accounting."
+                : "Prototype application evidence is active. Byte accounting is not release-validated."
         case .degraded:
-            "Advanced observation is enabled, but the provider evidence is stale or incomplete."
+            "Prototype evidence is stale or incomplete, so no definitive app-level conclusion should be drawn."
         }
     }
 
@@ -54,10 +54,7 @@ final class AdvancedObservabilityController: ObservableObject {
         }
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
+    func stop() { timer?.invalidate(); timer = nil }
 
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
@@ -74,65 +71,46 @@ final class AdvancedObservabilityController: ObservableObject {
         }
 
         do {
-            guard let loaded = try bridge.loadSnapshot() else {
-                snapshot = AdvancedObservabilitySnapshot(
-                    providerState: bridge.sharedContainerAvailable ? .awaitingApproval : .providerUnavailable,
-                    byteAccounting: .notValidated,
-                    applications: [],
-                    lastObservedAt: nil,
-                    generatedAt: now
-                )
-                bridgeStatus = bridge.sharedContainerAvailable ? "Waiting for provider evidence" : "Provider unavailable in this build"
+            guard let loaded = try prototypeBridge.loadSnapshot() else {
+                snapshot = AdvancedObservabilitySnapshot(providerState: .providerUnavailable, byteAccounting: .notValidated, applications: [], lastObservedAt: nil, generatedAt: now)
+                bridgeStatus = "B0 platform bridge blocked"
                 lastError = nil
                 return
             }
 
             let age = now.timeIntervalSince(loaded.generatedAt)
             let state: AdvancedObservabilityProviderState = age <= 20 ? loaded.providerState : .degraded
-            snapshot = AdvancedObservabilitySnapshot(
-                providerState: state,
-                byteAccounting: loaded.byteAccounting,
-                applications: loaded.applications,
-                lastObservedAt: loaded.lastObservedAt,
-                generatedAt: loaded.generatedAt
-            )
-            bridgeStatus = bridge.sharedContainerAvailable ? "Shared provider bridge" : "Developer bridge"
+            snapshot = AdvancedObservabilitySnapshot(providerState: state, byteAccounting: loaded.byteAccounting, applications: loaded.applications, lastObservedAt: loaded.lastObservedAt, generatedAt: loaded.generatedAt)
+            bridgeStatus = "Developer prototype snapshot"
             lastError = nil
         } catch {
             snapshot = AdvancedObservabilitySnapshot(providerState: .degraded, byteAccounting: .notValidated, applications: [], lastObservedAt: nil, generatedAt: now)
-            bridgeStatus = "Bridge read failed"
+            bridgeStatus = "Prototype snapshot read failed"
             lastError = error.localizedDescription
         }
     }
 }
 
-struct AdvancedObservabilityBridgeStore {
-    static let appGroupIdentifier = "group.com.daniele21.trafficmonitoring"
-    static let fileName = "advanced-observability-snapshot.json"
-
+/// Development-only handoff for deterministic B1/B2 UI tests.
+/// It is deliberately not presented as a production Network Extension IPC path:
+/// Apple's filter data provider sandbox blocks disk writes and IPC on macOS.
+struct AdvancedObservabilityPrototypeBridge {
+    static let fileName = "advanced-observability-prototype.json"
     private let fileManager: FileManager
 
     init(fileManager: FileManager = .default) { self.fileManager = fileManager }
-
-    var sharedContainerAvailable: Bool {
-        fileManager.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier) != nil
-    }
 
     func loadSnapshot() throws -> AdvancedObservabilitySnapshot? {
         let url = snapshotURL
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(AdvancedObservabilitySnapshot.self, from: data)
     }
 
     private var snapshotURL: URL {
-        if let shared = fileManager.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupIdentifier) {
-            return shared.appendingPathComponent(Self.fileName)
-        }
         let base = (try? fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)) ?? fileManager.temporaryDirectory
-        let directory = base.appendingPathComponent("TrafficMonitoring", isDirectory: true).appendingPathComponent("AdvancedObservability", isDirectory: true)
+        let directory = base.appendingPathComponent("TrafficMonitoring", isDirectory: true).appendingPathComponent("AdvancedObservabilityPrototype", isDirectory: true)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent(Self.fileName)
     }
