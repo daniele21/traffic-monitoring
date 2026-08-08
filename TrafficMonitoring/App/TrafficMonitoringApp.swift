@@ -11,20 +11,29 @@ struct TrafficMonitoringApp: App {
                 .task { model.start() }
                 .tint(BrandTheme.networkBlue)
         } label: {
-            Image(systemName: "shield.fill").accessibilityLabel("Traffic Monitoring")
+            Image(systemName: "shield.fill")
+                .accessibilityLabel("Traffic Monitoring")
         }
         .menuBarExtraStyle(.window)
 
         Window("Traffic Monitoring", id: "analytics") {
-            DashboardView(diagnostics: model.diagnostics, usageStore: model.usageStore, advancedObservability: model.advancedObservability)
-                .task { model.start() }
-                .tint(BrandTheme.networkBlue)
+            DashboardView(
+                diagnostics: model.diagnostics,
+                usageStore: model.usageStore,
+                advancedObservability: model.advancedObservability
+            )
+            .task { model.start() }
+            .tint(BrandTheme.networkBlue)
         }
         .defaultSize(width: 1220, height: 780)
 
         Window("Traffic Monitoring Settings", id: "settings") {
-            SettingsView(locationAuthorization: model.locationAuthorization, advancedObservability: model.advancedObservability)
-                .tint(BrandTheme.networkBlue)
+            SettingsView(
+                locationAuthorization: model.locationAuthorization,
+                advancedObservability: model.advancedObservability,
+                advancedObservabilityInstaller: model.advancedObservabilityInstaller
+            )
+            .tint(BrandTheme.networkBlue)
         }
         .windowResizability(.contentSize)
     }
