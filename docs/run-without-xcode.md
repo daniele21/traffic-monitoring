@@ -2,14 +2,14 @@
 
 Use this path when you want to test Traffic Monitoring on a Mac that does not have the full Xcode application installed.
 
-GitHub Actions builds and tests the macOS application on an Apple runner, then publishes a runnable app bundle as an artifact.
+GitHub Actions builds and tests the macOS application on an Apple runner, then creates a separate clean Release app build and publishes it as an artifact.
 
 ## Download the latest build
 
 1. Open the repository on GitHub.
 2. Open **Actions** → **CI**.
 3. Select the latest successful run for the branch or pull request you want to test.
-4. In **Artifacts**, download **TrafficMonitoring-macOS-debug**.
+4. In **Artifacts**, download **TrafficMonitoring-macOS**.
 5. Unzip the downloaded GitHub artifact.
 6. Inside it, unzip `TrafficMonitoring.app.zip`.
 
@@ -59,6 +59,6 @@ Look for the network icon in the macOS menu bar. From there you can open:
 
 ## What this build is for
 
-The downloadable CI artifact is a development build for validating M0/M1 behavior on real Macs. It is not yet a production distribution build.
+The downloadable CI artifact is a Release-configuration development build for validating M0/M1 behavior on real Macs. It is built separately from the test host so XCTest bundles and test frameworks are not included in the packaged app.
 
-Production distribution will later require Developer ID signing and notarization so users can launch the app without development-oriented Gatekeeper steps.
+It is not yet a production distribution build. Production distribution will later require Developer ID signing and notarization so users can launch the app without development-oriented Gatekeeper steps.
