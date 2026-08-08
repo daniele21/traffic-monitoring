@@ -1,0 +1,30 @@
+name: TrafficMonitoringAdvancedObservabilitySpike
+options:
+  minimumXcodeGenVersion: 2.41.0
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  TrafficMonitoringFilterExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources
+    dependencies:
+      - sdk: NetworkExtension.framework
+      - sdk: Network.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.filter
+        PRODUCT_NAME: TrafficMonitoringFilterExtension
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: TrafficMonitoringFilterExtension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+
+schemes:
+  TrafficMonitoringFilterExtension:
+    build:
+      targets:
+        TrafficMonitoringFilterExtension: all
