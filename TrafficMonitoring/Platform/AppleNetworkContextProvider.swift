@@ -45,6 +45,7 @@ final class AppleNetworkContextProvider: NetworkContextProviding, @unchecked Sen
             pathStatus: pathState.status,
             isExpensive: pathState.isExpensive,
             isConstrained: pathState.isConstrained,
+            wifiInterfaceNames: wifi.knownWiFiInterfaceNames(),
             wifiSSIDByInterface: wifi.currentSSIDByInterface()
         )
     }
