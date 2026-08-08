@@ -29,14 +29,26 @@ jobs:
             -scheme TrafficMonitoring \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath .build/xcode \
+            -derivedDataPath .build/ci-tests \
             CODE_SIGNING_ALLOWED=NO \
             build test 2>&1 | tee xcodebuild.log
+
+      - name: Build clean Release app bundle
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TrafficMonitoring.xcodeproj \
+            -scheme TrafficMonitoring \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/package \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee app-build.log
 
       - name: Package runnable macOS app
         run: |
           set -euo pipefail
-          APP_PATH=".build/xcode/Build/Products/Debug/TrafficMonitoring.app"
+          APP_PATH=".build/package/Build/Products/Release/TrafficMonitoring.app"
           ARCHIVE_PATH="TrafficMonitoring.app.zip"
 
           test -d "$APP_PATH"
@@ -55,18 +67,20 @@ jobs:
       - name: Upload runnable macOS app
         uses: actions/upload-artifact@v4
         with:
-          name: TrafficMonitoring-macOS-debug
+          name: TrafficMonitoring-macOS
           path: |
             TrafficMonitoring.app.zip
             TrafficMonitoring.app.zip.sha256
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload Xcode build log
+      - name: Upload Xcode build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
-          path: xcodebuild.log
+          path: |
+            xcodebuild.log
+            app-build.log
           if-no-files-found: ignore
           retention-days: 7
