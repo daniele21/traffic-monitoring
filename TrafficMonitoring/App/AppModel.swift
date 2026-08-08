@@ -4,8 +4,15 @@ import Foundation
 
 @MainActor
 final class AppModel: ObservableObject {
-    let diagnostics = DiagnosticsViewModel()
+    let usageStore: LocalUsageStore
+    let diagnostics: DiagnosticsViewModel
     let locationAuthorization = LocationAuthorizationController()
+
+    init() {
+        let store = LocalUsageStore.makeDefault()
+        usageStore = store
+        diagnostics = DiagnosticsViewModel(usageStore: store)
+    }
 
     func start() {
         diagnostics.start()
