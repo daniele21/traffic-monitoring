@@ -16,8 +16,9 @@ struct AboutThisDataView: View {
                 .foregroundStyle(.secondary)
 
             Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 10) {
-                row("Observed", duration(coverage.observedSeconds))
                 row("Selected period", duration(coverage.selectedSeconds))
+                row("Observed", duration(coverage.observedSeconds))
+                row("Healthy observation", duration(coverage.healthySeconds))
                 row("Not observed", duration(coverage.unobservedSeconds))
                 row("Wi-Fi / metadata degraded", duration(coverage.metadataDegradedSeconds))
                 row("Tracking degraded", duration(coverage.trackingDegradedSeconds))
@@ -38,7 +39,7 @@ struct AboutThisDataView: View {
             Spacer()
         }
         .padding(22)
-        .frame(width: 560, height: 480)
+        .frame(width: 560, height: 500)
     }
 
     @ViewBuilder
