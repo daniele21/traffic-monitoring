@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "agent/**"]
+    branches: [main, "agent/**", "positioning/**"]
   pull_request:
   workflow_dispatch:
 
@@ -37,6 +37,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build test 2>&1 | tee xcodebuild.log
 
+      - name: Build Advanced Observability spike (unsigned)
+        run: |
+          set -o pipefail
+          cd experiments/advanced-observability
+          xcodegen generate
+          xcodebuild \
+            -project TrafficMonitoringAdvancedObservabilitySpike.xcodeproj \
+            -scheme AdvancedObservabilitySpike \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath ../../.build/advanced-observability \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee ../../advanced-observability-build.log
+
       - name: Build clean Release app bundle
         run: |
           set -o pipefail
@@ -56,15 +70,8 @@ jobs:
           ARCHIVE_PATH="TrafficMonitoring.app.zip"
 
           test -d "$APP_PATH"
-
-          # CI has no distribution certificate. Ad-hoc signing gives the local
-          # test bundle a coherent code signature without pretending it is
-          # notarized or suitable for public distribution.
           codesign --force --deep --sign - "$APP_PATH"
           codesign --verify --deep --strict "$APP_PATH"
-
-          # Pre-compress the .app so executable permissions and bundle metadata
-          # survive GitHub Actions artifact transport.
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
           shasum -a 256 "$ARCHIVE_PATH" > TrafficMonitoring.app.zip.sha256
 
@@ -86,5 +93,6 @@ jobs:
           path: |
             xcodebuild.log
             app-build.log
+            advanced-observability-build.log
           if-no-files-found: ignore
           retention-days: 7
