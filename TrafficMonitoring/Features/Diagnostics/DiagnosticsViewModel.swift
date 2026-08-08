@@ -6,6 +6,7 @@ import OSLog
 @MainActor
 final class DiagnosticsViewModel: ObservableObject {
     @Published private(set) var rows: [DiagnosticInterfaceRow] = []
+    @Published private(set) var sessionUsage: [SessionNetworkUsage] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published private(set) var isRunning = false
@@ -18,6 +19,7 @@ final class DiagnosticsViewModel: ObservableObject {
     private var loopTask: Task<Void, Never>?
     private var previousByInterface: [String: InterfaceCounterReading] = [:]
     private var previousIdentityByInterface: [String: String] = [:]
+    private var sessionAccumulator = SessionUsageAccumulator()
 
     init(
         counterReader: InterfaceCounterReader = DarwinInterfaceCounterReader(),
@@ -71,6 +73,7 @@ final class DiagnosticsViewModel: ObservableObject {
                     wifiInterfaceNames: context.wifiInterfaceNames
                 )
                 let identity = identityKey(for: reading.interfaceName, classification: classification, context: context)
+                let displayName = networkName(for: reading.interfaceName, classification: classification, context: context)
                 let contextChanged = previousIdentityByInterface[reading.interfaceName].map { $0 != identity } ?? false
 
                 var delta = TrafficDelta(
@@ -85,6 +88,14 @@ final class DiagnosticsViewModel: ObservableObject {
                     switch calculator.calculate(previous: previous, current: reading) {
                     case let .accepted(value):
                         delta = value
+                        sessionAccumulator.record(
+                            identityKey: identity,
+                            networkName: displayName,
+                            connectionKind: connectionKind(for: classification),
+                            isExpensive: context.isExpensive,
+                            observedAt: reading.observedAt,
+                            delta: value
+                        )
                     case let .discarded(reason):
                         Logger.diagnostics.debug(
                             "Discarded interval for \(reading.interfaceName, privacy: .public): \(String(describing: reason), privacy: .public)"
@@ -108,7 +119,7 @@ final class DiagnosticsViewModel: ObservableObject {
                         deltaTransmittedBytes: delta.transmittedBytes,
                         downloadBytesPerSecond: delta.downloadBytesPerSecond,
                         uploadBytesPerSecond: delta.uploadBytesPerSecond,
-                        networkName: networkName(for: reading.interfaceName, classification: classification, context: context),
+                        networkName: displayName,
                         isExpensive: context.isExpensive,
                         isConstrained: context.isConstrained,
                         isIncluded: included
@@ -117,6 +128,7 @@ final class DiagnosticsViewModel: ObservableObject {
             }
 
             rows = nextRows
+            sessionUsage = sessionAccumulator.networks
             lastUpdated = Date()
             errorMessage = nil
         } catch {
@@ -141,6 +153,22 @@ final class DiagnosticsViewModel: ObservableObject {
         includedRows.first?.networkName ?? "Offline"
     }
 
+    var sessionDownloadedBytes: UInt64 {
+        sessionAccumulator.downloadedBytes
+    }
+
+    var sessionUploadedBytes: UInt64 {
+        sessionAccumulator.uploadedBytes
+    }
+
+    var sessionTotalBytes: UInt64 {
+        sessionAccumulator.totalBytes
+    }
+
+    var hasUnnamedWiFiUsage: Bool {
+        sessionUsage.contains { $0.connectionKind == .wifi && $0.networkName == "Wi-Fi · SSID unavailable" }
+    }
+
     private func isIncluded(_ classification: InterfaceClassification) -> Bool {
         if case .excluded = classification { return false }
         return true
@@ -152,6 +180,14 @@ final class DiagnosticsViewModel: ObservableObject {
         case .wired: "Wired"
         case .otherPhysical: "Other physical"
         case let .excluded(reason): "Excluded · \(reason)"
+        }
+    }
+
+    private func connectionKind(for classification: InterfaceClassification) -> NetworkConnectionKind {
+        switch classification {
+        case .wifi: .wifi
+        case .wired: .wired
+        case .otherPhysical, .excluded: .other
         }
     }
 
