@@ -28,24 +28,45 @@ struct ApplicationsView: View {
     }
 
     private var statusCard: some View {
-        HStack(spacing: 14) {
-            Image(systemName: statusIcon)
-                .font(.title2)
-                .foregroundStyle(BrandTheme.statusColor(for: advanced.providerState))
-                .frame(width: 30)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Advanced Observability · \(advanced.providerState.title)").font(.headline)
-                Text(advanced.statusExplanation).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
+                Image(systemName: statusIcon)
+                    .font(.title2)
+                    .foregroundStyle(BrandTheme.statusColor(for: advanced.providerState))
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Advanced Observability · \(advanced.providerState.title)").font(.headline)
+                    Text(advanced.statusExplanation).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("Byte accounting").font(.caption).foregroundStyle(.secondary)
+                    Text(advanced.byteAccounting.title).font(.callout.weight(.semibold))
+                }
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text("Byte accounting").font(.caption).foregroundStyle(.secondary)
-                Text(advanced.byteAccounting.title).font(.callout.weight(.semibold))
+
+            if advanced.providerState == .active || advanced.providerState == .degraded {
+                Divider()
+                HStack(spacing: 24) {
+                    diagnostic("Protocol", advanced.snapshot.protocolVersion.map(String.init) ?? "—")
+                    diagnostic("Active flows", advanced.snapshot.activeFlowCount.map(String.init) ?? "—")
+                    diagnostic("Observed flows", advanced.snapshot.observedFlowCount.map(String.init) ?? "—")
+                    diagnostic("Provider since", advanced.snapshot.providerStartedAt.map { $0.formatted(.dateTime.hour().minute().second()) } ?? "—")
+                    Spacer()
+                    diagnostic("Snapshot", advanced.snapshot.generatedAt.formatted(.dateTime.hour().minute().second()))
+                }
             }
         }
         .padding(14)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).stroke(BrandTheme.networkBlue.opacity(0.18), lineWidth: 1) }
+    }
+
+    private func diagnostic(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(value).font(.caption.weight(.semibold)).monospacedDigit()
+        }
     }
 
     private var applicationTable: some View {
