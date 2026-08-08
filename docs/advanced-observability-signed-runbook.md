@@ -38,16 +38,60 @@ Before building, obtain/configure:
 
 Host and provider must have the same stable Apple Team ID. The XPC service fails closed when that identity is missing or mismatched.
 
-## 2. Build
+## 2. Preferred build path without local Xcode
 
-Generate the project as usual:
+The repository contains a manual workflow:
+
+```text
+Actions → Advanced Observability Signed Validation Build → Run workflow
+```
+
+It is intentionally `workflow_dispatch` only and does not run on normal pushes.
+
+Configure these GitHub Actions secrets first:
+
+```text
+APPLE_TEAM_ID
+MACOS_SIGNING_IDENTITY
+MACOS_CERTIFICATE_P12_BASE64
+MACOS_CERTIFICATE_PASSWORD
+MACOS_HOST_PROVISIONING_PROFILE_BASE64
+MACOS_EXTENSION_PROVISIONING_PROFILE_BASE64
+```
+
+Where:
+
+- `MACOS_SIGNING_IDENTITY` is the exact code-signing identity imported from the P12;
+- the host profile belongs to `com.daniele21.trafficmonitoring`;
+- the extension profile belongs to `com.daniele21.trafficmonitoring.filter`;
+- both profiles belong to `APPLE_TEAM_ID`.
+
+The workflow:
+
+1. creates a temporary keychain;
+2. imports the signing certificate without printing it;
+3. installs the two temporary provisioning profiles;
+4. validates both profile Team IDs;
+5. generates the Xcode project;
+6. builds host + embedded system extension with target-specific profile specifiers;
+7. runs `verify-signed-advanced-observability.sh`;
+8. uploads only the signed `.app.zip` + checksum for three days;
+9. removes the temporary keychain.
+
+It does **not** upload the P12 or provisioning profiles.
+
+A successful signed-build workflow is still only a packaging/signing gate. Runtime activation must be tested on the target Mac.
+
+### Alternative local build
+
+If a Mac with Xcode is available:
 
 ```bash
 brew install xcodegen
 xcodegen generate
 ```
 
-Build with your signing/provisioning configuration. Do not remove the host/provider entitlements just to make the build succeed.
+Build with the same host/provider profiles and Team ID. Do not remove the host/provider entitlements just to make the build succeed.
 
 Expected embedded path:
 
