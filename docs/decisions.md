@@ -16,13 +16,15 @@ Compact decision log. Keep entries short; detailed mechanics belong in the focus
 
 ## D002 — Measure cumulative physical-interface counters
 
-**Status:** accepted direction; concrete Darwin API must be validated in M1.
+**Status:** accepted; concrete Darwin source selected in M1.
 
-**Decision:** derive usage from cumulative RX/TX counters on physical interfaces and calculate deltas.
+**Decision:** derive usage from cumulative RX/TX counters on physical interfaces and calculate deltas. On Darwin, read `NET_RT_IFLIST2` routing messages through `sysctl` and consume `RTM_IFINFO2` / `if_msghdr2.ifm_data` (`if_data64`).
 
-**Why:** it measures the bytes crossing the Mac's network interfaces without packet capture, VPN interception, content inspection, or a privileged helper.
+**Why:** this measures bytes crossing the Mac's network interfaces without packet capture, VPN interception, content inspection, or a privileged helper. The `if_data64` byte fields are 64-bit and therefore suitable for long-running/high-volume cumulative accounting.
 
-**Consequences:** local-LAN traffic can be included; values are network-interface usage rather than exact carrier-billable usage.
+**Rejected for byte accounting:** `getifaddrs()` exposes `struct if_data` for `AF_LINK`; its `ifi_ibytes` / `ifi_obytes` fields are 32-bit on Darwin and can roll over around 4 GiB. It may still be used later for non-counter metadata if useful.
+
+**Consequences:** local-LAN traffic can be included; values are network-interface usage rather than exact carrier-billable usage. M1 must still validate observed values against macOS reference tooling and controlled transfers.
 
 ---
 
@@ -177,6 +179,6 @@ Compact decision log. Keep entries short; detailed mechanics belong in the focus
 - CoreWLAN CWInterface: https://developer.apple.com/documentation/corewlan/cwinterface
 - CoreWLAN SSID: https://developer.apple.com/documentation/corewlan/cwinterface/ssid()
 - Apple DTS discussion of modern macOS SSID Location requirement: https://developer.apple.com/forums/thread/732431
-- getifaddrs macOS manual page: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/freeifaddrs.3.html
-- `if_data` byte counters: https://developer.apple.com/documentation/kernel/if_data
+- Darwin `if_data64`: https://developer.apple.com/documentation/kernel/if_data64
+- Darwin `if_data`: https://developer.apple.com/documentation/kernel/if_data
 - MenuBarExtra: https://developer.apple.com/documentation/swiftui/menubarextra

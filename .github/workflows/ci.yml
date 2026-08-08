@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "agent/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  macos-build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Swift core tests
+        run: swift test
+
+      - name: Xcode build and tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TrafficMonitoring.xcodeproj \
+            -scheme TrafficMonitoring \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/ci-tests \
+            CODE_SIGNING_ALLOWED=NO \
+            build test 2>&1 | tee xcodebuild.log
+
+      - name: Build clean Release app bundle
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TrafficMonitoring.xcodeproj \
+            -scheme TrafficMonitoring \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/package \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee app-build.log
+
+      - name: Package runnable macOS app
+        run: |
+          set -euo pipefail
+          APP_PATH=".build/package/Build/Products/Release/TrafficMonitoring.app"
+          ARCHIVE_PATH="TrafficMonitoring.app.zip"
+
+          test -d "$APP_PATH"
+
+          # CI has no distribution certificate. Ad-hoc signing gives the local
+          # test bundle a coherent code signature without pretending it is
+          # notarized or suitable for public distribution.
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+
+          # Pre-compress the .app so executable permissions and bundle metadata
+          # survive GitHub Actions artifact transport.
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
+          shasum -a 256 "$ARCHIVE_PATH" > TrafficMonitoring.app.zip.sha256
+
+      - name: Upload runnable macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrafficMonitoring-macOS
+          path: |
+            TrafficMonitoring.app.zip
+            TrafficMonitoring.app.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Xcode build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: |
+            xcodebuild.log
+            app-build.log
+          if-no-files-found: ignore
+          retention-days: 7

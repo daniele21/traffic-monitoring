@@ -1,0 +1,51 @@
+name: TrafficMonitoring
+options:
+  minimumXcodeGenVersion: 2.41.0
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  TrafficMonitoring:
+    type: application
+    platform: macOS
+    sources:
+      - path: TrafficMonitoring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring
+        PRODUCT_NAME: TrafficMonitoring
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_NSLocationUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
+        ENABLE_APP_SANDBOX: NO
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+
+  TrafficMonitoringTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TrafficMonitoringCoreTests
+    dependencies:
+      - target: TrafficMonitoring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/TrafficMonitoring.app/Contents/MacOS/TrafficMonitoring
+        BUNDLE_LOADER: $(TEST_HOST)
+
+schemes:
+  TrafficMonitoring:
+    build:
+      targets:
+        TrafficMonitoring: all
+        TrafficMonitoringTests: [test]
+    test:
+      targets:
+        - TrafficMonitoringTests
