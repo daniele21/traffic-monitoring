@@ -6,7 +6,8 @@ This document defines the v1 menu-bar and analytics experience. It does not defi
 
 - Glanceable first, detailed on demand.
 - Make the current network obvious.
-- Keep download/upload/total terminology consistent.
+- Keep live-rate wording distinct from cumulative-usage wording.
+- Use direct labels that answer a user question without requiring networking knowledge.
 - Never imply packet inspection or exact carrier billing.
 - Permission failures should degrade gracefully instead of blocking the app.
 - Optimize for a utility that can remain open for months without demanding attention.
@@ -15,17 +16,20 @@ This document defines the v1 menu-bar and analytics experience. It does not defi
 
 ```text
 Menu bar
-  ├─ Current connection
-  ├─ Live usage
-  ├─ Quick period totals
+  ├─ Connected now
+  ├─ Download now / Upload now
+  ├─ Used since opening / period totals
   ├─ Open Analytics
   ├─ Settings
   └─ Quit
 
 Analytics window
-  ├─ Overview
-  ├─ Networks
-  └─ Network detail
+  ├─ Analytics
+  │   ├─ Total used / Downloaded / Uploaded
+  │   ├─ Usage by network
+  │   └─ Network detail
+  └─ Monitor
+      └─ Technical interface diagnostics
 
 Settings
   ├─ General
@@ -33,7 +37,36 @@ Settings
   └─ Data
 ```
 
-A separate sidebar is optional; v1 can keep the analytics window as one focused dashboard with drill-down.
+The technical counter table belongs under **Monitor**, not in the default analytics view.
+
+## Copy hierarchy
+
+Use wording that clearly separates instantaneous speed from accumulated volume.
+
+### Live values
+
+Preferred:
+
+- `Connected now`
+- `Download now`
+- `Upload now`
+
+These values are rates and should include `/s`.
+
+### Accumulated values
+
+Preferred:
+
+- `Total used`
+- `Downloaded`
+- `Uploaded`
+- `Used since opening`
+- `Usage by network`
+- `Networks used`
+
+These values are transferred volume and must not include `/s`.
+
+Do not expose `Raw`, `Delta`, interface names, counter semantics, or similar implementation language in the default analytics experience. Those terms are allowed only in **Monitor**.
 
 ## Menu-bar item
 
@@ -67,21 +100,15 @@ Suggested hierarchy:
 ```text
 Network Usage
 
-Current network
+Connected now
 Home Wi-Fi
-Wi-Fi · Connected
 
-Live
-↓ 2.3 MB/s      ↑ 180 kB/s
+Download now       2.3 MB/s
+Upload now         180 kB/s
+Used since opening 1.42 GB
 
-Current session
-1.42 GB
-
-Today
-3.81 GB
-
-This month
-18.7 GB
+Today              3.81 GB
+This month         18.7 GB
 
 [ Open Analytics ]
 
@@ -89,7 +116,7 @@ Settings…
 Quit
 ```
 
-When `isExpensive == true`, add a restrained metadata badge such as `Expensive` or `Likely hotspot`; do not make an absolute carrier claim.
+When `isExpensive == true`, add a restrained metadata badge such as `Likely hotspot`; do not make an absolute carrier claim.
 
 When SSID is unavailable:
 
@@ -100,31 +127,29 @@ Name unavailable
 
 with a secondary action such as `Enable Wi-Fi identification…` if Location permission can be requested/opened.
 
-## Dashboard overview
+## Dashboard analytics
 
 ### Header
 
 - title: `Network Usage`;
-- period picker: Today / 7D / 30D / Month / Custom;
-- optional filter control.
+- default section: `Analytics`;
+- secondary section: `Monitor`;
+- once persistence is enabled, period picker: Today / 7 days / 30 days / This month / Custom.
 
 ### Summary cards
 
-Three primary values:
+Four clear values are allowed when useful:
 
-- Total;
-- Download;
-- Upload.
+- `Total used`;
+- `Downloaded`;
+- `Uploaded`;
+- `Networks used`.
 
-Optional secondary value:
-
-- Expensive / likely-hotspot usage.
-
-Do not show more cards until real product needs justify them.
+Once persistent analytics are available, `Networks used` can move out if a more useful period metric replaces it.
 
 ### Usage over time
 
-Use Swift Charts.
+Use Swift Charts once persistent time buckets are available.
 
 Default series:
 
@@ -137,9 +162,9 @@ Chart tooltip/selection should show:
 
 ```text
 8 Aug
-Total 3.4 GB
-Download 2.9 GB
-Upload 0.5 GB
+Total used 3.4 GB
+Downloaded 2.9 GB
+Uploaded 0.5 GB
 ```
 
 ### Usage by network
@@ -149,15 +174,21 @@ Rank descending by total bytes.
 Columns/row content:
 
 ```text
-Network            Type        Download   Upload   Total     Share
-Home               Wi-Fi       12.1 GB    1.9 GB   14.0 GB   46%
-iPhone              Wi-Fi       8.8 GB    1.2 GB   10.0 GB   33%
-Office LAN          Ethernet     5.7 GB    0.5 GB    6.2 GB   20%
+Network            Connection   Downloaded   Uploaded   Total used   Share
+Home               Wi-Fi        12.1 GB      1.9 GB     14.0 GB      46%
+iPhone             Wi-Fi         8.8 GB      1.2 GB     10.0 GB      33%
+Office LAN         Ethernet      5.7 GB      0.5 GB      6.2 GB      20%
 ```
 
-On narrow layouts, keep only Network + Total + Share and reveal detail on selection.
+On narrow layouts, keep only Network + Total used + Share and reveal detail on selection.
 
-A small icon/badge can identify expensive usage.
+A small badge can identify `Likely hotspot` only when the underlying context supports that wording.
+
+## Current M1 analytics scaffold
+
+Before persistent history is enabled, the analytics screen may show an in-memory validation summary grouped by network identity. It must be explicitly labeled as data **since the app was opened** and must not imply that Today/Month history survives a relaunch.
+
+This scaffold exists to validate that accepted deltas are attributed to the expected Wi-Fi/network identity before persistence is built. It does not satisfy the M5 analytics milestone.
 
 ## Network detail
 
@@ -184,7 +215,7 @@ v1 filters:
 - Today
 - 7 days
 - 30 days
-- Month
+- This month
 - Custom
 
 ### Network
@@ -196,7 +227,7 @@ v1 filters:
 
 - All
 - Wi-Fi
-- Ethernet/wired
+- Ethernet
 - Other
 
 ### Cost metadata
@@ -204,7 +235,7 @@ v1 filters:
 Optional compact filter:
 
 - All
-- Expensive only
+- Likely hotspot only
 
 Avoid a filter-builder UI in v1.
 
@@ -272,7 +303,11 @@ Show `Offline` and zero live rate. Keep historical dashboard usable.
 
 ### Location denied
 
-Show traffic normally, grouped under generic Wi-Fi identities. Permission copy must not dominate the interface.
+Show traffic normally, grouped under generic Wi-Fi identities. Use direct copy:
+
+`Traffic is being counted, but different Wi-Fi networks cannot be separated by name.`
+
+Permission copy must not dominate the interface.
 
 ### Persistence error
 
@@ -288,20 +323,29 @@ This is materially different: if history cannot be saved, show a visible warning
 
 ## Copy terminology
 
-Preferred:
+Preferred product-facing terms:
 
 - `Network Usage`
-- `Download`
-- `Upload`
-- `Total`
-- `Current session`
+- `Analytics`
+- `Monitor`
+- `Connected now`
+- `Download now`
+- `Upload now`
+- `Total used`
+- `Downloaded`
+- `Uploaded`
+- `Used since opening`
+- `Usage by network`
 - `Wi-Fi network`
-- `Expensive network` / `Likely hotspot` only when context makes the uncertainty clear
+- `Likely hotspot` only when uncertainty is clear
 
-Avoid:
+Avoid product-facing terms:
 
+- `Raw`
+- `Delta`
+- `RX` / `TX`
 - `Exact data usage`
 - `Carrier usage`
 - `Mobile plan used`
 
-unless a future carrier-side integration makes those statements true.
+unless shown in a technical Monitor surface or a future carrier-side integration makes those statements true.
