@@ -22,7 +22,7 @@ final class LocationAuthorizationController: NSObject, ObservableObject, CLLocat
     }
 
     var isAuthorized: Bool {
-        status == .authorizedAlways || status == .authorizedWhenInUse
+        status == .authorizedAlways
     }
 
     var statusLabel: String {
@@ -33,7 +33,7 @@ final class LocationAuthorizationController: NSObject, ObservableObject, CLLocat
             return "Restricted"
         case .denied:
             return "Denied"
-        case .authorizedAlways, .authorizedWhenInUse:
+        case .authorizedAlways:
             return "Allowed"
         @unknown default:
             return "Unknown"
@@ -45,8 +45,11 @@ final class LocationAuthorizationController: NSObject, ObservableObject, CLLocat
         manager.requestWhenInUseAuthorization()
     }
 
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        status = manager.authorizationStatus
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let newStatus = manager.authorizationStatus
+        Task { @MainActor [weak self] in
+            self?.status = newStatus
+        }
     }
 }
 #endif
