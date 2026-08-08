@@ -11,6 +11,11 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. Only the technical document referenced by that milestone
 4. `testing.md` for the relevant acceptance tests
 
+### Validating M1 on a real Mac
+
+1. `m1-validation.md`
+2. `tracking-engine.md` only if a scenario behaves unexpectedly
+
 ### Changing tracking behavior
 
 1. `../AGENTS.md`
@@ -34,6 +39,7 @@ The documentation is organized for progressive disclosure: start with the smalle
 - `product-spec.md` — user problem, v1 scope, non-goals, success criteria.
 - `architecture.md` — components, dependency direction, runtime data flow.
 - `tracking-engine.md` — interface enumeration, byte counters, network identity, transitions, VPN, sleep/wake.
+- `m1-validation.md` — compact real-Mac checklist for the current measurement feasibility gate.
 - `data-and-analytics.md` — SwiftData entities, buckets, sessions, retention, queries.
 - `ux.md` — menu-bar and dashboard information architecture.
 - `implementation-plan.md` — phased delivery plan with acceptance gates.
