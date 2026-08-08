@@ -8,129 +8,155 @@ Date: 2026-08-08
 
 Traffic Monitoring wants optional app-level network evidence while preserving these invariants:
 
-- the core network-usage product remains useful without privileged components;
+- core network analytics remain useful without privileged components;
 - payload/content persistence is not acceptable;
-- source-app and locality uncertainty stay explicit;
-- advanced evidence reaches the main app through supported macOS mechanisms;
-- the product should not become a VPN/proxy unless the evidence requirements genuinely demand it.
+- source-app/locality uncertainty stays explicit;
+- provider evidence reaches the main app through supported macOS mechanisms;
+- activation is user-controlled;
+- observability must not silently interfere with existing network/security configuration.
 
-## Initial assumption and correction
+## Platform corrections discovered by the spike
 
-The first spike assumed a cross-platform content-filter architecture:
+The first cross-platform assumption was wrong in two places:
 
-```text
-NEFilterDataProvider
-        ↓
-NEFilterControlProvider
-        ↓
-Traffic Monitoring app
-```
+- `NEFilterControlProvider` is unavailable on macOS;
+- `NEFilterFlow.sourceAppIdentifier` is unavailable on macOS.
 
-The real macOS SDK rejected `NEFilterControlProvider` as unavailable on macOS. It also rejected `sourceAppIdentifier` on `NEFilterFlow`.
+The real macOS SDK instead supports the primitives used by the accepted prototype:
 
-Those failures were useful platform evidence, not reasons to abandon the Content Filter approach.
-
-Further macOS-specific validation established that:
-
-- `sourceAppAuditToken` is available to the macOS Filter Data Provider;
-- Security Code Signing APIs compile for resolving the running code into a signing identifier;
-- flow statistics reporting compiles;
-- a Network Extension system extension uses `NEProvider.startSystemExtensionMode()`;
-- a custom `NEMachServiceName` / `NSXPCListener` bridge compiles in the same system-extension process;
-- the main app can compile an `NSXPCConnection` client for that service.
-
-Apple DTS has also clarified that older restrictive-sandbox language for Filter Data Providers was written before macOS system-extension providers and does not describe macOS behavior unchanged.
+- `NEFilterFlow.sourceAppAuditToken`;
+- Security Code Signing APIs for signing-identifier resolution;
+- `NEFilterReport` statistics;
+- `NEProvider.startSystemExtensionMode()`;
+- Mach/XPC service in the system-extension process;
+- main-app `NSXPCConnection` client;
+- SystemExtensions activation lifecycle;
+- `NEFilterManager` system-extension configuration.
 
 ## Decision
 
-Use the following architecture for **B1 signed prototype validation**:
+Use this architecture for **B1 signed prototype validation**:
 
 ```text
 Traffic Monitoring.app
         │
-        │ XPC snapshot request
+        │ XPC aggregate snapshot
         ▼
-Network Extension system extension
+com.daniele21.trafficmonitoring.filter.systemextension
         │
         ├── NEFilterDataProvider
         ├── sourceAppAuditToken
         ├── Security signing-identifier resolution
-        ├── local/external/unknown classifier
+        ├── local / external / unknown classifier
         ├── low-frequency flow statistics
-        └── in-memory aggregation
+        └── in-memory per-app aggregation
 ```
+
+The system extension is embedded in the host app bundle but Advanced Observability remains optional.
 
 Do not use `NEFilterControlProvider` on macOS.
 
-Do not persist packet payloads, request bodies, browsing content or raw audit tokens.
+Do not persist packet payloads, browsing content, request bodies, or raw audit tokens.
 
-Provider → app IPC carries only the aggregate snapshot required by the Applications view.
+## Activation decision
 
-## Why Content Filter remains preferred over a Transparent Proxy
+The host app may request activation only after explicit user action.
 
-The desired product is observability, not traffic forwarding.
+Prototype flow:
 
-A Transparent Proxy would make Traffic Monitoring participate more deeply in the traffic path and create a larger reliability/performance surface. The Content Filter prototype can potentially provide the required socket-flow metadata without copying application payload through our process.
+```text
+user confirmation
+    ↓
+OSSystemExtensionRequest.activationRequest
+    ↓
+macOS user approval if required
+    ↓
+NEFilterManager configuration
+    ↓
+filterSockets + filterBrowsers
+```
 
-Transparent Proxy remains a fallback research direction only if the signed Content Filter prototype cannot meet source-app, byte-accounting or IPC requirements.
+The user can disable the filter without disabling core Traffic Monitoring.
 
-## Why Endpoint Security is not the primary source
+## Content-filter exclusivity
 
-Endpoint Security is valuable for process identity but is not the selected general Internet socket byte-accounting source for this product.
+Apple documents that enabling one `NEFilterManager` content-filter configuration disables other active network content filters.
 
-It may later be considered as an optional identity-enrichment source only if a concrete gap justifies the additional entitlement and complexity.
+This is a material product constraint.
+
+Decision:
+
+- never enable Advanced Observability automatically;
+- warn explicitly before enabling;
+- keep core Analytics independent;
+- keep coexistence with security/filtering software as a production go/no-go gate.
+
+If this constraint is unacceptable for the intended audience, the prototype remains experimental even if source-app/byte accuracy succeeds.
+
+## Why Content Filter remains preferred over Transparent Proxy for the prototype
+
+Traffic Monitoring wants observability, not traffic forwarding.
+
+A Transparent Proxy creates a larger traffic-path reliability and performance surface. The Content Filter prototype can potentially provide the required socket-flow metadata without copying application payload through Traffic Monitoring.
+
+Transparent Proxy remains a fallback research direction only if a concrete signed B1 test proves Content Filter insufficient.
 
 ## Security consequences
 
-The XPC service is currently a B0 capability implementation. Before production:
+Before production:
 
-- validate the connecting client code-signing identity;
-- ensure the service cannot be used by arbitrary local processes to extract evidence;
-- expose aggregates only;
+- authenticate the XPC client by code-signing identity;
+- expose aggregate evidence only;
 - never expose raw audit tokens over IPC;
-- avoid verbose logging of endpoints or application activity in release builds.
+- avoid endpoint/application activity logging in Release;
+- test provider/app update and restart behavior;
+- treat stale/incomplete provider evidence as degraded.
 
 ## Distribution consequences
 
 A production provider requires more than CI compilation:
 
-- Network Extension entitlement/provisioning;
+- Apple Network Extension capability/provisioning;
 - system-extension installation entitlement on the host;
-- Developer ID appropriate Network Extension entitlement for direct distribution;
+- Developer ID-appropriate Network Extension entitlement for direct distribution;
+- matching Team ID/signing relationship;
 - user approval;
-- `NEFilterManager` configuration;
+- appropriate app installation location;
+- `NEFilterManager` permission/configuration;
 - notarization;
-- update/uninstall lifecycle.
+- update/deactivation/uninstall lifecycle.
 
-The normal ad-hoc CI `.app` must remain usable for core tracking even when none of those are available.
+The normal ad-hoc CI `.app` remains a core-testing artifact and must not pretend it can activate the provider.
 
 ## Acceptance before production
 
-This ADR is promoted from prototype to production only when a real signed Mac proves:
+Promote this ADR from prototype to production only when a signed real Mac proves:
 
-1. expected source applications map correctly from audit token;
+1. expected source apps map correctly from audit token;
 2. helper/WebKit/system/unknown cases are documented;
 3. local/external/unknown classification agrees with controlled traffic;
-4. statistics byte deltas reconcile with controlled transfers;
-5. XPC survives app/provider restart and authenticates the host app;
-6. provider coverage can be measured;
+4. statistics byte deltas reconcile with known transfers;
+5. XPC survives app/provider restart and authenticates the host;
+6. provider observation coverage is measurable;
 7. VPN behavior is understood;
-8. idle CPU/wakeups and high-throughput overhead are acceptable;
-9. activation/update/uninstall works in the intended distribution path.
+8. CPU/wakeups/throughput overhead are acceptable;
+9. activation/update/deactivation works in the intended distribution path;
+10. content-filter exclusivity is acceptable for the product.
 
 ## Consequences
 
 Positive:
 
-- keeps advanced observability separate from the lightweight core;
-- avoids payload inspection by design;
-- allows explicit unknown states;
-- compiles end-to-end through the intended provider → XPC → UI boundary;
-- does not force a proxy architecture prematurely.
+- advanced observability stays separate from the lightweight core;
+- payload inspection is not required;
+- unknown evidence remains explicit;
+- provider → XPC → UI source/build/package path is CI-verified;
+- the system extension is embedded with the bundle-identifier-matching wrapper name required by macOS.
 
 Negative:
 
-- requires privileged Apple capabilities and user approval;
-- cannot be fully validated in ad-hoc GitHub Actions;
-- adds a second process and IPC security surface;
-- real-Mac validation is mandatory before any privacy-audit claim.
+- privileged Apple capabilities and approval are required;
+- signed runtime behavior cannot be proven by GitHub's ad-hoc development artifact;
+- XPC adds a security surface;
+- content-filter exclusivity may conflict with existing security/filter software;
+- real-Mac validation is mandatory before audit/privacy claims.
