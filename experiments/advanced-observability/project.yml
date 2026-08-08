@@ -7,24 +7,42 @@ settings:
     SWIFT_VERSION: "5.0"
 
 targets:
-  TrafficMonitoringFilterExtension:
+  TrafficMonitoringFilterDataProvider:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: Sources/FilterDataProvider.swift
+    dependencies:
+      - sdk: NetworkExtension.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.filter
+        PRODUCT_NAME: TrafficMonitoringFilterDataProvider
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: TrafficMonitoringFilterExtension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+
+  TrafficMonitoringFilterControlProvider:
     type: app-extension
     platform: macOS
     sources:
-      - path: Sources
+      - path: Sources/FilterControlProvider.swift
     dependencies:
       - sdk: NetworkExtension.framework
       - sdk: Network.framework
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.filter
-        PRODUCT_NAME: TrafficMonitoringFilterExtension
-        INFOPLIST_FILE: Info.plist
-        CODE_SIGN_ENTITLEMENTS: TrafficMonitoringFilterExtension.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.control
+        PRODUCT_NAME: TrafficMonitoringFilterControlProvider
+        INFOPLIST_FILE: ControlInfo.plist
+        CODE_SIGN_ENTITLEMENTS: TrafficMonitoringFilterControl.entitlements
         GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
 
 schemes:
-  TrafficMonitoringFilterExtension:
+  AdvancedObservabilitySpike:
     build:
       targets:
-        TrafficMonitoringFilterExtension: all
+        TrafficMonitoringFilterDataProvider: all
+        TrafficMonitoringFilterControlProvider: all
