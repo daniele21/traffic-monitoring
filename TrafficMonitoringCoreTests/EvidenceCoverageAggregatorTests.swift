@@ -47,6 +47,29 @@ final class EvidenceCoverageAggregatorTests: XCTestCase {
         XCTAssertEqual(summary.quality, .partiallyIdentified)
     }
 
+    func testObservationGapAloneMakesEvidencePartial() {
+        let start = Date(timeIntervalSince1970: 1_786_180_800)
+        let snapshot = EvidenceCoverageSnapshot(
+            bucketKey: "gap",
+            startedAt: start,
+            endedAt: start.addingTimeInterval(300),
+            activeSeconds: 60,
+            healthySeconds: 60,
+            metadataDegradedSeconds: 0,
+            trackingDegradedSeconds: 0,
+            unknownNetworkSeconds: 0,
+            lastObservedAt: start.addingTimeInterval(60)
+        )
+
+        let summary = aggregator.summary(
+            [snapshot],
+            selectedPeriod: DateInterval(start: start, end: start.addingTimeInterval(120))
+        )
+
+        XCTAssertEqual(summary.unobservedSeconds, 60, accuracy: 0.001)
+        XCTAssertEqual(summary.quality, .partiallyIdentified)
+    }
+
     func testTrackingDegradedTakesPrecedence() {
         let start = Date(timeIntervalSince1970: 1_786_180_800)
         let snapshot = EvidenceCoverageSnapshot(
