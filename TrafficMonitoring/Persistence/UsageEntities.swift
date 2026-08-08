@@ -6,6 +6,7 @@ import SwiftData
 final class NetworkProfileEntity {
     @Attribute(.unique) var identityKey: String
     var networkName: String
+    var displayAlias: String?
     var connectionKindRaw: String
     var interfaceName: String
     var firstSeenAt: Date
@@ -16,6 +17,7 @@ final class NetworkProfileEntity {
     init(
         identityKey: String,
         networkName: String,
+        displayAlias: String? = nil,
         connectionKindRaw: String,
         interfaceName: String,
         firstSeenAt: Date,
@@ -25,6 +27,7 @@ final class NetworkProfileEntity {
     ) {
         self.identityKey = identityKey
         self.networkName = networkName
+        self.displayAlias = displayAlias
         self.connectionKindRaw = connectionKindRaw
         self.interfaceName = interfaceName
         self.firstSeenAt = firstSeenAt
@@ -74,6 +77,41 @@ final class UsageBucketEntity {
         self.uploadedBytes = uploadedBytes
         self.isExpensive = isExpensive
         self.isConstrained = isConstrained
+        self.lastObservedAt = lastObservedAt
+    }
+}
+
+@Model
+final class EvidenceCoverageEntity {
+    @Attribute(.unique) var bucketKey: String
+    var startedAt: Date
+    var endedAt: Date
+    var activeSeconds: Double
+    var healthySeconds: Double
+    var metadataDegradedSeconds: Double
+    var trackingDegradedSeconds: Double
+    var unknownNetworkSeconds: Double
+    var lastObservedAt: Date
+
+    init(
+        bucketKey: String,
+        startedAt: Date,
+        endedAt: Date,
+        activeSeconds: Double,
+        healthySeconds: Double,
+        metadataDegradedSeconds: Double,
+        trackingDegradedSeconds: Double,
+        unknownNetworkSeconds: Double,
+        lastObservedAt: Date
+    ) {
+        self.bucketKey = bucketKey
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.activeSeconds = activeSeconds
+        self.healthySeconds = healthySeconds
+        self.metadataDegradedSeconds = metadataDegradedSeconds
+        self.trackingDegradedSeconds = trackingDegradedSeconds
+        self.unknownNetworkSeconds = unknownNetworkSeconds
         self.lastObservedAt = lastObservedAt
     }
 }
