@@ -18,9 +18,18 @@ jobs:
         run: swift test
       - name: Xcode build and tests
         run: |
+          set -o pipefail
           xcodebuild \
             -project TrafficMonitoring.xcodeproj \
             -scheme TrafficMonitoring \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
-            build test
+            build test 2>&1 | tee xcodebuild.log
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
