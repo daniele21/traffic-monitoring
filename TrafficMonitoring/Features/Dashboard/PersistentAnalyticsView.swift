@@ -11,6 +11,9 @@ struct PersistentAnalyticsView: View {
     @State private var selectedNetworkIdentity = Self.allNetworks
     @State private var customStart = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     @State private var customEnd = Date()
+    @State private var showAboutData = false
+    @State private var showExport = false
+    @State private var detailSelection: NetworkDetailSelection?
 
     private static let allNetworks = "__all_networks__"
 
@@ -22,6 +25,7 @@ struct PersistentAnalyticsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             controls
+            evidenceStatus
 
             if let error = analytics.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle")
@@ -57,6 +61,20 @@ struct PersistentAnalyticsView: View {
         .onChange(of: customEnd) { _, _ in
             if timeframe == .custom { refresh() }
         }
+        .sheet(isPresented: $showAboutData) {
+            AboutThisDataView(coverage: analytics.coverageSummary)
+        }
+        .sheet(isPresented: $showExport) {
+            EvidenceExportPreviewView(analytics: analytics)
+        }
+        .sheet(item: $detailSelection) { selection in
+            NetworkDetailView(
+                analytics: analytics,
+                identityKey: selection.id,
+                timeframe: timeframe,
+                onChanged: { refresh() }
+            )
+        }
     }
 
     private var controls: some View {
@@ -71,6 +89,14 @@ struct PersistentAnalyticsView: View {
                 .frame(width: 320)
 
                 Spacer()
+
+                Button("About this data") {
+                    showAboutData = true
+                }
+
+                Button("Export evidence…") {
+                    showExport = true
+                }
 
                 Picker("Time period", selection: $timeframe) {
                     ForEach(AnalyticsTimeframe.allCases) { item in
@@ -88,6 +114,46 @@ struct PersistentAnalyticsView: View {
                 }
             }
         }
+    }
+
+    private var evidenceStatus: some View {
+        HStack(spacing: 12) {
+            Image(systemName: qualityIcon)
+                .font(.title3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Evidence quality · \(analytics.evidenceQuality.title)")
+                    .fontWeight(.semibold)
+                Text(analytics.evidenceQuality.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("Observed coverage")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(coveragePercentage)
+                    .font(.headline)
+                    .monospacedDigit()
+            }
+
+            if analytics.coverageSummary.unobservedSeconds > 1 {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Not observed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(duration(analytics.coverageSummary.unobservedSeconds))
+                        .font(.headline)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var overview: some View {
@@ -209,7 +275,7 @@ struct PersistentAnalyticsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Usage by network")
                     .font(.title2.weight(.semibold))
-                Text("Compare total, downloaded and uploaded data for every detected network.")
+                Text("Compare usage and inspect how confidently each network was identified.")
                     .foregroundStyle(.secondary)
             }
 
@@ -228,39 +294,51 @@ struct PersistentAnalyticsView: View {
                             }
                         }
                     }
-                    .width(min: 210, ideal: 260)
+                    .width(min: 190, ideal: 230)
+
+                    TableColumn("Evidence") { row in
+                        Text(analytics.identityQuality(for: row).title)
+                    }
+                    .width(min: 115, ideal: 135)
 
                     TableColumn("Connection") { row in
                         Text(row.connectionKind.rawValue)
                     }
-                    .width(min: 90, ideal: 110)
+                    .width(min: 80, ideal: 100)
 
                     TableColumn("Downloaded") { row in
                         Text(bytes(row.downloadedBytes)).monospacedDigit()
                     }
-                    .width(min: 110, ideal: 130)
+                    .width(min: 100, ideal: 120)
 
                     TableColumn("Uploaded") { row in
                         Text(bytes(row.uploadedBytes)).monospacedDigit()
                     }
-                    .width(min: 100, ideal: 120)
+                    .width(min: 90, ideal: 110)
 
                     TableColumn("Total used") { row in
                         Text(bytes(row.totalBytes))
                             .fontWeight(.semibold)
                             .monospacedDigit()
                     }
-                    .width(min: 110, ideal: 130)
+                    .width(min: 100, ideal: 120)
 
                     TableColumn("Share") { row in
                         Text(share(row.totalBytes)).monospacedDigit()
                     }
-                    .width(min: 70, ideal: 80)
+                    .width(min: 60, ideal: 70)
 
                     TableColumn("Last active") { row in
                         Text(dateLabel(row.lastSeenAt))
                     }
-                    .width(min: 120, ideal: 150)
+                    .width(min: 110, ideal: 130)
+
+                    TableColumn("") { row in
+                        Button("Details") {
+                            detailSelection = NetworkDetailSelection(id: row.identityKey)
+                        }
+                    }
+                    .width(min: 70, ideal: 80)
                 }
                 .frame(minHeight: 340)
             }
@@ -275,7 +353,7 @@ struct PersistentAnalyticsView: View {
                     .fontWeight(.semibold)
                 Text(
                     analytics.store.persistsAcrossRelaunches
-                        ? "Usage is stored on this Mac in efficient 5-minute blocks and checkpointed about every 15 seconds."
+                        ? "Usage and coverage evidence stay on this Mac in efficient 5-minute blocks, checkpointed about every 15 seconds."
                         : "The app is temporarily keeping usage only in memory."
                 )
                 .font(.caption)
@@ -304,7 +382,7 @@ struct PersistentAnalyticsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.networkName)
                     .fontWeight(.medium)
-                Text(row.connectionKind.rawValue)
+                Text("\(row.connectionKind.rawValue) · \(analytics.identityQuality(for: row).title)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -319,6 +397,11 @@ struct PersistentAnalyticsView: View {
                 .fontWeight(.semibold)
                 .monospacedDigit()
                 .frame(width: 110, alignment: .trailing)
+
+            Button("Details") {
+                detailSelection = NetworkDetailSelection(id: row.identityKey)
+            }
+            .buttonStyle(.borderless)
         }
         .padding(.vertical, 4)
     }
@@ -345,6 +428,20 @@ struct PersistentAnalyticsView: View {
     private var selectedNetworkLabel: String {
         guard selectedNetworkIdentity != Self.allNetworks else { return "All networks" }
         return analytics.networkRows.first { $0.identityKey == selectedNetworkIdentity }?.networkName ?? "Selected network"
+    }
+
+    private var coveragePercentage: String {
+        (analytics.coverageSummary.observedRatio * 100)
+            .formatted(.number.precision(.fractionLength(0))) + "%"
+    }
+
+    private var qualityIcon: String {
+        switch analytics.evidenceQuality {
+        case .identified: "checkmark.seal.fill"
+        case .partiallyIdentified: "info.circle.fill"
+        case .unknownNetwork: "wifi.exclamationmark"
+        case .trackingDegraded: "exclamationmark.triangle.fill"
+        }
     }
 
     private func refresh() {
@@ -380,6 +477,13 @@ struct PersistentAnalyticsView: View {
             return date.formatted(.dateTime.day().month(.abbreviated).year())
         }
     }
+
+    private func duration(_ seconds: TimeInterval) -> String {
+        let value = max(0, seconds)
+        if value < 60 { return "\(Int(value.rounded())) sec" }
+        if value < 3_600 { return "\(Int((value / 60).rounded())) min" }
+        return (value / 3_600).formatted(.number.precision(.fractionLength(1))) + " hr"
+    }
 }
 
 private enum AnalyticsSection: String, CaseIterable, Identifiable {
@@ -388,5 +492,9 @@ private enum AnalyticsSection: String, CaseIterable, Identifiable {
     case networks = "Networks"
 
     var id: Self { self }
+}
+
+private struct NetworkDetailSelection: Identifiable {
+    let id: String
 }
 #endif
