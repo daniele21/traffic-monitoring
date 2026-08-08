@@ -12,18 +12,35 @@ Implemented in the first development slice:
 
 - native SwiftUI macOS app skeleton;
 - menu-bar utility and analytics/diagnostic window;
-- public-API Darwin interface counter reader;
+- public-API Darwin 64-bit interface counter reader;
 - CoreWLAN Wi-Fi interface/SSID enrichment;
 - `NWPathMonitor` path metadata (`isExpensive`, `isConstrained`);
 - physical/virtual interface classification;
 - safe cumulative-counter delta calculation;
 - diagnostic table with raw counters and live deltas;
 - deterministic Swift core tests;
-- macOS GitHub Actions build/test workflow.
+- macOS GitHub Actions build/test workflow;
+- downloadable runnable `.app` artifact from successful CI runs.
 
 Persistence and historical analytics are intentionally deferred until the M1 real-network validation gate passes.
 
-## Generate and open the Xcode project
+## Run without installing Xcode
+
+The easiest way to test the current app is to use the macOS build produced by GitHub Actions.
+
+1. Open **Actions** → **CI** in this repository.
+2. Open the latest successful run for the branch/PR you want to test.
+3. Download the **TrafficMonitoring-macOS-debug** artifact.
+4. Unzip the downloaded artifact, then unzip `TrafficMonitoring.app.zip` inside it.
+5. Launch `TrafficMonitoring.app`.
+
+The development artifact is ad-hoc signed, not notarized. If macOS blocks it, follow [`docs/run-without-xcode.md`](docs/run-without-xcode.md) for the safe local-test steps and checksum verification.
+
+The app runs as an `LSUIElement` menu-bar utility, so after launch look for the network icon in the macOS menu bar rather than expecting a normal main window.
+
+## Local Xcode development
+
+Full Xcode is optional for simply running the downloadable development build, but it is still the supported local workflow for interactive development/debugging.
 
 The project definition is kept in `project.yml` so the generated Xcode project does not become a large, noisy source-of-truth file.
 
@@ -34,8 +51,6 @@ open TrafficMonitoring.xcodeproj
 ```
 
 Run the `TrafficMonitoring` scheme on macOS 14+.
-
-The app runs as an `LSUIElement` menu-bar utility. Use **Open Analytics** from the menu-bar popover to open the current diagnostic surface.
 
 ## Core tests
 
@@ -65,9 +80,11 @@ Start with:
 
 Focused documents:
 
+- [`docs/run-without-xcode.md`](docs/run-without-xcode.md)
 - [`docs/product-spec.md`](docs/product-spec.md)
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/tracking-engine.md`](docs/tracking-engine.md)
+- [`docs/m1-validation.md`](docs/m1-validation.md)
 - [`docs/data-and-analytics.md`](docs/data-and-analytics.md)
 - [`docs/ux.md`](docs/ux.md)
 - [`docs/testing.md`](docs/testing.md)
