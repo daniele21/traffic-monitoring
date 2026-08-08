@@ -28,6 +28,7 @@ targets:
         INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSLocationUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
+        INFOPLIST_KEY_NSSystemExtensionUsageDescription: Traffic Monitoring uses an optional Network Extension system component to attribute aggregate network flow metadata to source applications for local Advanced Observability. It does not inspect or store packet contents.
         ENABLE_APP_SANDBOX: NO
         CODE_SIGN_ENTITLEMENTS: TrafficMonitoring/TrafficMonitoring.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
