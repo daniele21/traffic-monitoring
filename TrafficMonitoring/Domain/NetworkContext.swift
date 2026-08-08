@@ -62,6 +62,9 @@ public struct NetworkContextSnapshot: Sendable, Equatable {
     public let pathStatus: PathStatus
     public let isExpensive: Bool
     public let isConstrained: Bool
+    /// CoreWLAN interface names are available independently from SSID access.
+    public let wifiInterfaceNames: Set<String>
+    /// SSIDs are optional enrichment and may be empty when Location is denied.
     public let wifiSSIDByInterface: [String: String]
     public let observedAt: Date
 
@@ -69,12 +72,14 @@ public struct NetworkContextSnapshot: Sendable, Equatable {
         pathStatus: PathStatus,
         isExpensive: Bool,
         isConstrained: Bool,
+        wifiInterfaceNames: Set<String>,
         wifiSSIDByInterface: [String: String],
         observedAt: Date = Date()
     ) {
         self.pathStatus = pathStatus
         self.isExpensive = isExpensive
         self.isConstrained = isConstrained
+        self.wifiInterfaceNames = wifiInterfaceNames
         self.wifiSSIDByInterface = wifiSSIDByInterface
         self.observedAt = observedAt
     }
