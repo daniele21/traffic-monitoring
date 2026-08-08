@@ -14,6 +14,8 @@ targets:
       - path: Sources
     dependencies:
       - sdk: NetworkExtension.framework
+      - sdk: Network.framework
+      - sdk: Security.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.filter
