@@ -24,7 +24,7 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. `adr/0001-advanced-observability-content-filter.md` only when revisiting the architecture decision
 4. `local-first-observability-plan.md` for the broader roadmap
 
-The current B0 result blocks production app-level evidence from the Content Filter architecture. B1 domain/UI scaffolding may be developed and tested, but no agent may present the normal app as receiving real provider evidence until a supported macOS handoff architecture passes a new gate.
+B0 is **GO for a signed real-Mac prototype**, not production acceptance. The provider → app XPC path, audit-token identity path, locality classification, statistics aggregation and Applications UI compile in CI. No agent may present per-app evidence as release-validated until signed activation, controlled-transfer reconciliation, coverage, XPC authentication and performance gates pass.
 
 ### Running the app without Xcode
 
@@ -93,9 +93,9 @@ The current B0 result blocks production app-level evidence from the Content Filt
 - `positioning.md` — authoritative positioning, ecosystem role, audiences, messaging, claims, and evidence levels.
 - `local-first-observability-plan.md` — detailed phased evolution from network-level analytics toward optional app attribution, locality evidence, audits, and developer tooling.
 - `a0-a2-implementation-status.md` — compact implementation/status view for repository positioning, evidence quality, and export.
-- `b0-b2-implementation-status.md` — compact current status of Advanced Observability implementation and blockers.
-- `advanced-observability-feasibility.md` — B0 macOS feasibility result and evidence-source constraints.
-- `adr/0001-advanced-observability-content-filter.md` — decision not to promote the current Content Filter spike into the production provider architecture.
+- `b0-b2-implementation-status.md` — compact current status of Advanced Observability implementation and remaining validation gates.
+- `advanced-observability-feasibility.md` — B0 macOS feasibility result, prototype architecture, signing/distribution and evidence-source constraints.
+- `adr/0001-advanced-observability-content-filter.md` — accepted architecture for signed prototype validation; production acceptance remains gated.
 - `brand.md` — approved visual identity, palette, typography, product language, and chart styling.
 
 ### Current product
