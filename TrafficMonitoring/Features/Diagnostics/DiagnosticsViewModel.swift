@@ -77,6 +77,8 @@ final class DiagnosticsViewModel: ObservableObject {
             let context = await contextProvider.currentSnapshot()
             var nextRows: [DiagnosticInterfaceRow] = []
             var encounteredContextBoundary = false
+            var metadataDegraded = false
+            var unknownNetwork = false
 
             for reading in readings {
                 let classification = classifier.classify(
@@ -95,6 +97,23 @@ final class DiagnosticsViewModel: ObservableObject {
                 )
 
                 let included = isIncluded(classification)
+                if included {
+                    switch classification {
+                    case .wifi:
+                        if context.wifiSSIDByInterface[reading.interfaceName] == nil {
+                            metadataDegraded = true
+                            unknownNetwork = true
+                        }
+                    case .wired:
+                        // v1 wired identity intentionally falls back to interface-level identity.
+                        metadataDegraded = true
+                    case .otherPhysical:
+                        metadataDegraded = true
+                    case .excluded:
+                        break
+                    }
+                }
+
                 if included, !contextChanged, let previous = previousByInterface[reading.interfaceName] {
                     switch calculator.calculate(previous: previous, current: reading) {
                     case let .accepted(value):
@@ -153,6 +172,14 @@ final class DiagnosticsViewModel: ObservableObject {
                 )
             }
 
+            let observedAt = readings.map(\.observedAt).max() ?? Date()
+            usageStore.recordCoverage(
+                observedAt: observedAt,
+                metadataDegraded: metadataDegraded,
+                unknownNetwork: unknownNetwork,
+                trackingDegraded: usageStore.persistenceErrorMessage != nil
+            )
+
             do {
                 if encounteredContextBoundary {
                     try usageStore.flush()
@@ -168,6 +195,14 @@ final class DiagnosticsViewModel: ObservableObject {
             lastUpdated = Date()
             errorMessage = nil
         } catch {
+            let observedAt = Date()
+            usageStore.recordCoverage(
+                observedAt: observedAt,
+                metadataDegraded: false,
+                unknownNetwork: false,
+                trackingDegraded: true
+            )
+            try? usageStore.flushIfNeeded(now: observedAt)
             errorMessage = error.localizedDescription
             Logger.counters.error("Counter read failed: \(error.localizedDescription, privacy: .public)")
         }
