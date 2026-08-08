@@ -20,7 +20,7 @@ Implemented in the first development slice:
 - diagnostic table with raw counters and live deltas;
 - deterministic Swift core tests;
 - macOS GitHub Actions build/test workflow;
-- downloadable runnable `.app` artifact from successful CI runs.
+- downloadable clean Release `.app` artifact from successful CI runs.
 
 Persistence and historical analytics are intentionally deferred until the M1 real-network validation gate passes.
 
@@ -30,7 +30,7 @@ The easiest way to test the current app is to use the macOS build produced by Gi
 
 1. Open **Actions** → **CI** in this repository.
 2. Open the latest successful run for the branch/PR you want to test.
-3. Download the **TrafficMonitoring-macOS-debug** artifact.
+3. Download the **TrafficMonitoring-macOS** artifact.
 4. Unzip the downloaded artifact, then unzip `TrafficMonitoring.app.zip` inside it.
 5. Launch `TrafficMonitoring.app`.
 
