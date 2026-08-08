@@ -80,7 +80,7 @@ private enum DashboardSection: String, CaseIterable, Identifiable {
     case analytics = "Analytics"
     case monitor = "Monitor"
 
-    var id: Self { self }
+    var id: String { rawValue }
 
     var subtitle: String {
         switch self {
