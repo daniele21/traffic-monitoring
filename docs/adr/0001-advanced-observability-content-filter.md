@@ -1,104 +1,136 @@
-# ADR 0001 — Advanced Observability content-filter spike
+# ADR 0001 — Advanced Observability macOS content-filter prototype
 
-Status: **Accepted as a negative production decision / retained as a capability experiment**
+Status: **Accepted for signed prototype validation; not yet accepted for production**
 
 Date: 2026-08-08
 
 ## Context
 
-Traffic Monitoring wants to explore optional app-level network evidence while preserving these invariants:
+Traffic Monitoring wants optional app-level network evidence while preserving these invariants:
 
-- the core network-usage product must remain useful without privileged components;
+- the core network-usage product remains useful without privileged components;
 - payload/content persistence is not acceptable;
-- source-app and locality uncertainty must stay explicit;
-- advanced evidence must reach the main app through supported macOS APIs;
-- the product must not become a VPN/proxy merely to satisfy portfolio positioning.
+- source-app and locality uncertainty stay explicit;
+- advanced evidence reaches the main app through supported macOS mechanisms;
+- the product should not become a VPN/proxy unless the evidence requirements genuinely demand it.
 
-A macOS `NEFilterDataProvider` was selected for B0 because `NEFilterFlow` exposes source-app metadata and filter reports can expose flow byte counts.
+## Initial assumption and correction
 
-## Initial proposal
-
-The initial spike assumed:
+The first spike assumed a cross-platform content-filter architecture:
 
 ```text
-NEFilterDataProvider system extension
-        ↓ reports
+NEFilterDataProvider
+        ↓
 NEFilterControlProvider
-        ↓ aggregate store
+        ↓
 Traffic Monitoring app
 ```
 
-## Evidence
+The real macOS SDK rejected `NEFilterControlProvider` as unavailable on macOS. It also rejected `sourceAppIdentifier` on `NEFilterFlow`.
 
-The macOS SDK CI compile rejected the control-provider target because `NEFilterControlProvider` is unavailable on macOS.
+Those failures were useful platform evidence, not reasons to abandon the Content Filter approach.
 
-Apple also documents the Filter Data Provider sandbox as blocking normal network access, IPC and disk writes. That sandbox means the Data Provider itself cannot simply write observed app-flow evidence to a shared store or send it to the host app.
+Further macOS-specific validation established that:
 
-The Data Provider capability itself remains useful for experimentation: source app identity and statistics can be observed inside the provider.
+- `sourceAppAuditToken` is available to the macOS Filter Data Provider;
+- Security Code Signing APIs compile for resolving the running code into a signing identifier;
+- flow statistics reporting compiles;
+- a Network Extension system extension uses `NEProvider.startSystemExtensionMode()`;
+- a custom `NEMachServiceName` / `NSXPCListener` bridge compiles in the same system-extension process;
+- the main app can compile an `NSXPCConnection` client for that service.
+
+Apple DTS has also clarified that older restrictive-sandbox language for Filter Data Providers was written before macOS system-extension providers and does not describe macOS behavior unchanged.
 
 ## Decision
 
-Do **not** adopt the current Content Filter design as the production B1/B2 architecture.
+Use the following architecture for **B1 signed prototype validation**:
 
-Retain only an isolated Data Provider system-extension spike for capability/SDK checks.
+```text
+Traffic Monitoring.app
+        │
+        │ XPC snapshot request
+        ▼
+Network Extension system extension
+        │
+        ├── NEFilterDataProvider
+        ├── sourceAppAuditToken
+        ├── Security signing-identifier resolution
+        ├── local/external/unknown classifier
+        ├── low-frequency flow statistics
+        └── in-memory aggregation
+```
 
-Keep B1 domain models and B2 UI as experimental scaffolding with `Provider unavailable` as the correct normal-build state until a supported evidence handoff exists.
+Do not use `NEFilterControlProvider` on macOS.
 
-Do not add an undocumented file write, socket, IPC escape, payload log, or other workaround around the Data Provider sandbox.
+Do not persist packet payloads, request bodies, browsing content or raw audit tokens.
 
-## Alternatives
+Provider → app IPC carries only the aggregate snapshot required by the Applications view.
 
-### Transparent proxy
+## Why Content Filter remains preferred over a Transparent Proxy
 
-Potential advantages:
+The desired product is observability, not traffic forwarding.
 
-- macOS deployment is supported;
-- tunnel-provider family has host/provider messaging;
-- provider participates directly in flows.
+A Transparent Proxy would make Traffic Monitoring participate more deeply in the traffic path and create a larger reliability/performance surface. The Content Filter prototype can potentially provide the required socket-flow metadata without copying application payload through our process.
 
-Concerns:
+Transparent Proxy remains a fallback research direction only if the signed Content Filter prototype cannot meet source-app, byte-accounting or IPC requirements.
 
-- materially more invasive traffic-path architecture;
-- requires flow copying / proxy behavior for traffic it claims;
-- source-app metadata is documented most clearly for per-app VPN contexts, not yet proven for our intended system-wide consumer use;
-- added reliability/performance risk conflicts with the lightweight utility goal.
+## Why Endpoint Security is not the primary source
 
-Decision: research later only if a focused spike proves the requirements without unacceptable product cost.
+Endpoint Security is valuable for process identity but is not the selected general Internet socket byte-accounting source for this product.
 
-### Endpoint Security
+It may later be considered as an optional identity-enrichment source only if a concrete gap justifies the additional entitlement and complexity.
 
-Strong process identity, but not a general Internet socket byte-accounting API. Documented socket events focus on UNIX-domain sockets.
+## Security consequences
 
-Decision: reject as the primary network evidence source.
+The XPC service is currently a B0 capability implementation. Before production:
 
-### Packet filter
+- validate the connecting client code-signing identity;
+- ensure the service cannot be used by arbitrary local processes to extract evidence;
+- expose aggregates only;
+- never expose raw audit tokens over IPC;
+- avoid verbose logging of endpoints or application activity in release builds.
 
-Can observe packets on macOS but does not directly solve reliable source-app attribution plus host evidence export.
+## Distribution consequences
 
-Decision: reject as the primary B1 architecture for now.
+A production provider requires more than CI compilation:
+
+- Network Extension entitlement/provisioning;
+- system-extension installation entitlement on the host;
+- Developer ID appropriate Network Extension entitlement for direct distribution;
+- user approval;
+- `NEFilterManager` configuration;
+- notarization;
+- update/uninstall lifecycle.
+
+The normal ad-hoc CI `.app` must remain usable for core tracking even when none of those are available.
+
+## Acceptance before production
+
+This ADR is promoted from prototype to production only when a real signed Mac proves:
+
+1. expected source applications map correctly from audit token;
+2. helper/WebKit/system/unknown cases are documented;
+3. local/external/unknown classification agrees with controlled traffic;
+4. statistics byte deltas reconcile with controlled transfers;
+5. XPC survives app/provider restart and authenticates the host app;
+6. provider coverage can be measured;
+7. VPN behavior is understood;
+8. idle CPU/wakeups and high-throughput overhead are acceptable;
+9. activation/update/uninstall works in the intended distribution path.
 
 ## Consequences
 
 Positive:
 
-- core product remains simple and shippable;
-- no false per-app claims;
-- advanced UI can be designed/tested independently;
-- platform blocker is visible rather than hidden.
+- keeps advanced observability separate from the lightweight core;
+- avoids payload inspection by design;
+- allows explicit unknown states;
+- compiles end-to-end through the intended provider → XPC → UI boundary;
+- does not force a proxy architecture prematurely.
 
 Negative:
 
-- B1 cannot be called end-to-end complete;
-- B2 cannot show real provider data in normal builds;
-- another architecture spike is required before Privacy Audit work.
-
-## Revisit trigger
-
-Revisit this ADR only when a supported macOS architecture can demonstrate all of:
-
-1. system-wide or adequately scoped source-app attribution;
-2. local/external/unknown classification;
-3. aggregate byte accounting;
-4. supported provider-to-app communication;
-5. no payload persistence requirement;
-6. acceptable always-on performance and distribution model.
+- requires privileged Apple capabilities and user approval;
+- cannot be fully validated in ad-hoc GitHub Actions;
+- adds a second process and IPC security surface;
+- real-Mac validation is mandatory before any privacy-audit claim.
