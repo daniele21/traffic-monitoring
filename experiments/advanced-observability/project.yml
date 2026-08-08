@@ -20,10 +20,15 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.experimental.filter
         PRODUCT_NAME: TrafficMonitoringFilterDataProvider
+        PRODUCT_MODULE_NAME: TrafficMonitoringFilterDataProvider
+        EXECUTABLE_NAME: TrafficMonitoringFilterDataProvider
+        WRAPPER_NAME: com.daniele21.trafficmonitoring.experimental.filter.systemextension
         INFOPLIST_FILE: Info.plist
         CODE_SIGN_ENTITLEMENTS: TrafficMonitoringFilterExtension.entitlements
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
+        MARKETING_VERSION: 0.2.0
+        CURRENT_PROJECT_VERSION: 1
 
 schemes:
   AdvancedObservabilitySpike:
