@@ -16,16 +16,19 @@ final class DiagnosticsViewModel: ObservableObject {
     private let classifier = InterfaceClassifier()
     private let calculator: DeltaCalculator
     private let configuration: TrackingConfiguration
+    private let usageStore: LocalUsageStore
     private var loopTask: Task<Void, Never>?
     private var previousByInterface: [String: InterfaceCounterReading] = [:]
     private var previousIdentityByInterface: [String: String] = [:]
     private var sessionAccumulator = SessionUsageAccumulator()
 
     init(
+        usageStore: LocalUsageStore,
         counterReader: InterfaceCounterReader = DarwinInterfaceCounterReader(),
         contextProvider: NetworkContextProviding = AppleNetworkContextProvider(),
         configuration: TrackingConfiguration = .default
     ) {
+        self.usageStore = usageStore
         self.counterReader = counterReader
         self.contextProvider = contextProvider
         self.configuration = configuration
@@ -57,6 +60,13 @@ final class DiagnosticsViewModel: ObservableObject {
         loopTask?.cancel()
         loopTask = nil
         isRunning = false
+
+        do {
+            try usageStore.flush()
+        } catch {
+            Logger.persistence.error("Final usage checkpoint failed: \(error.localizedDescription, privacy: .public)")
+        }
+
         previousByInterface.removeAll()
         previousIdentityByInterface.removeAll()
     }
@@ -66,6 +76,7 @@ final class DiagnosticsViewModel: ObservableObject {
             let readings = try counterReader.readCounters()
             let context = await contextProvider.currentSnapshot()
             var nextRows: [DiagnosticInterfaceRow] = []
+            var encounteredContextBoundary = false
 
             for reading in readings {
                 let classification = classifier.classify(
@@ -88,20 +99,35 @@ final class DiagnosticsViewModel: ObservableObject {
                     switch calculator.calculate(previous: previous, current: reading) {
                     case let .accepted(value):
                         delta = value
+                        let kind = connectionKind(for: classification)
+
                         sessionAccumulator.record(
                             identityKey: identity,
                             networkName: displayName,
-                            connectionKind: connectionKind(for: classification),
+                            connectionKind: kind,
                             isExpensive: context.isExpensive,
                             observedAt: reading.observedAt,
                             delta: value
                         )
+
+                        usageStore.record(
+                            identityKey: identity,
+                            networkName: displayName,
+                            connectionKind: kind,
+                            interfaceName: reading.interfaceName,
+                            isExpensive: context.isExpensive,
+                            isConstrained: context.isConstrained,
+                            observedAt: reading.observedAt,
+                            delta: value
+                        )
+
                     case let .discarded(reason):
                         Logger.diagnostics.debug(
                             "Discarded interval for \(reading.interfaceName, privacy: .public): \(String(describing: reason), privacy: .public)"
                         )
                     }
                 } else if contextChanged {
+                    encounteredContextBoundary = true
                     Logger.context.debug("Context boundary on \(reading.interfaceName, privacy: .public); resetting baseline")
                 }
 
@@ -125,6 +151,16 @@ final class DiagnosticsViewModel: ObservableObject {
                         isIncluded: included
                     )
                 )
+            }
+
+            do {
+                if encounteredContextBoundary {
+                    try usageStore.flush()
+                } else {
+                    try usageStore.flushIfNeeded()
+                }
+            } catch {
+                Logger.persistence.error("Usage checkpoint failed: \(error.localizedDescription, privacy: .public)")
             }
 
             rows = nextRows
