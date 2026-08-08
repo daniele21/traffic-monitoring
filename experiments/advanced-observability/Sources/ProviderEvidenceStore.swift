@@ -5,6 +5,7 @@ import Security
 
 final class ProviderEvidenceStore {
     static let shared = ProviderEvidenceStore()
+    static let protocolVersion = 1
 
     private struct FlowState {
         let applicationIdentifier: String
@@ -33,13 +34,25 @@ final class ProviderEvidenceStore {
         let applications: [AppAggregate]
         let lastObservedAt: Date?
         let generatedAt: Date
+        let protocolVersion: Int
+        let providerStartedAt: Date
+        let activeFlowCount: Int
+        let observedFlowCount: Int
     }
 
     private let queue = DispatchQueue(label: "com.daniele21.trafficmonitoring.provider-evidence")
     private var flows: [UUID: FlowState] = [:]
     private var applications: [String: AppAggregate] = [:]
+    private var providerStartedAt = Date()
+    private var observedFlowCount = 0
 
     private init() {}
+
+    func markProviderStarted(at date: Date = Date()) {
+        queue.sync {
+            providerStartedAt = date
+        }
+    }
 
     func register(flow: NEFilterFlow, observedAt: Date = Date()) {
         let identity = ApplicationIdentityResolver.signingIdentifier(from: flow.sourceAppAuditToken) ?? "Unknown application"
@@ -48,6 +61,7 @@ final class ProviderEvidenceStore {
         queue.sync {
             guard flows[flow.identifier] == nil else { return }
             flows[flow.identifier] = FlowState(applicationIdentifier: identity, locality: locality, reportedBytes: 0)
+            observedFlowCount += 1
             var aggregate = applications[identity] ?? AppAggregate(applicationIdentifier: identity, lastObservedAt: observedAt)
             incrementFlowCount(&aggregate, locality: locality)
             aggregate.lastObservedAt = max(aggregate.lastObservedAt, observedAt)
@@ -56,7 +70,17 @@ final class ProviderEvidenceStore {
     }
 
     func record(report: NEFilterReport, observedAt: Date = Date()) {
-        guard report.event == .statistics, let flow = report.flow else { return }
+        guard let flow = report.flow else { return }
+        let isFinalReport: Bool
+        switch report.event {
+        case .statistics:
+            isFinalReport = false
+        case .flowClosed:
+            isFinalReport = true
+        default:
+            return
+        }
+
         let total = saturatingAdd(UInt64(max(0, report.bytesInboundCount)), UInt64(max(0, report.bytesOutboundCount)))
 
         queue.sync {
@@ -64,6 +88,7 @@ final class ProviderEvidenceStore {
                 let identity = ApplicationIdentityResolver.signingIdentifier(from: flow.sourceAppAuditToken) ?? "Unknown application"
                 let locality = LocalityClassifier.classify(flow: flow)
                 flows[flow.identifier] = FlowState(applicationIdentifier: identity, locality: locality, reportedBytes: 0)
+                observedFlowCount += 1
                 var aggregate = applications[identity] ?? AppAggregate(applicationIdentifier: identity, lastObservedAt: observedAt)
                 incrementFlowCount(&aggregate, locality: locality)
                 applications[identity] = aggregate
@@ -72,13 +97,18 @@ final class ProviderEvidenceStore {
             guard var state = flows[flow.identifier] else { return }
             let delta = total >= state.reportedBytes ? total - state.reportedBytes : total
             state.reportedBytes = total
-            flows[flow.identifier] = state
 
             var aggregate = applications[state.applicationIdentifier] ?? AppAggregate(applicationIdentifier: state.applicationIdentifier, lastObservedAt: observedAt)
             aggregate.accountedBytes = saturatingAdd(aggregate.accountedBytes, delta)
             addBytes(&aggregate, locality: state.locality, bytes: delta)
             aggregate.lastObservedAt = max(aggregate.lastObservedAt, observedAt)
             applications[state.applicationIdentifier] = aggregate
+
+            if isFinalReport {
+                flows.removeValue(forKey: flow.identifier)
+            } else {
+                flows[flow.identifier] = state
+            }
         }
     }
 
@@ -90,7 +120,11 @@ final class ProviderEvidenceStore {
                 byteAccounting: "notValidated",
                 applications: values,
                 lastObservedAt: values.map(\.lastObservedAt).max(),
-                generatedAt: now
+                generatedAt: now,
+                protocolVersion: Self.protocolVersion,
+                providerStartedAt: providerStartedAt,
+                activeFlowCount: flows.count,
+                observedFlowCount: observedFlowCount
             )
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
