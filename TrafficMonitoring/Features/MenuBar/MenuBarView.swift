@@ -43,7 +43,10 @@ struct MenuBarView: View {
                 NSApp.activate(ignoringOtherApps: true)
             }
             Divider()
-            Button("Quit") { NSApp.terminate(nil) }
+            Button("Quit") {
+                diagnostics.stop()
+                NSApp.terminate(nil)
+            }
         }
         .padding(10)
         .frame(width: 280)
