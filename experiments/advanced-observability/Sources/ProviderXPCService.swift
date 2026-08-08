@@ -60,10 +60,11 @@ private enum XPCClientValidationResult {
 }
 
 /// Validates the process connecting to the provider's Mach service before any
-/// evidence is returned. The client must be the Traffic Monitoring host app,
-/// have a valid code signature, and be signed by the same Apple Developer Team
-/// as the provider. Ad-hoc builds intentionally fail closed because they do not
-/// carry a stable Team ID.
+/// evidence is returned. `NSXPCConnection` exposes the kernel-supplied peer PID
+/// on the supported macOS SDK; Security.framework then resolves that running
+/// process to its signed static code identity. The client must be the Traffic
+/// Monitoring host app, carry a valid signature, and use the same non-empty Team
+/// ID as the provider. Ad-hoc builds intentionally fail closed.
 private struct XPCClientCodeSignatureValidator {
     let expectedIdentifier: String
 
@@ -73,7 +74,9 @@ private struct XPCClientCodeSignatureValidator {
             return .rejected("Provider has no stable Apple Developer Team identity")
         }
 
-        guard let clientCode = Self.code(for: connection.auditToken) else {
+        let processIdentifier = connection.processIdentifier
+        guard processIdentifier > 0,
+              let clientCode = Self.runningCode(for: processIdentifier) else {
             return .rejected("Could not resolve connecting process code signature")
         }
 
@@ -81,7 +84,7 @@ private struct XPCClientCodeSignatureValidator {
             return .rejected("Connecting process code signature is not valid")
         }
 
-        guard let clientIdentity = Self.identity(for: clientCode) else {
+        guard let clientIdentity = Self.identity(forRunningCode: clientCode) else {
             return .rejected("Connecting process signing identity is unavailable")
         }
 
@@ -96,10 +99,10 @@ private struct XPCClientCodeSignatureValidator {
         return .accepted(clientIdentity)
     }
 
-    private static func code(for auditToken: audit_token_t) -> SecCode? {
-        var token = auditToken
-        let tokenData = Data(bytes: &token, count: MemoryLayout.size(ofValue: token))
-        let attributes = [kSecGuestAttributeAudit as String: tokenData] as CFDictionary
+    private static func runningCode(for processIdentifier: pid_t) -> SecCode? {
+        let attributes = [
+            kSecGuestAttributePid as String: NSNumber(value: processIdentifier)
+        ] as CFDictionary
         var code: SecCode?
         guard SecCodeCopyGuestWithAttributes(nil, attributes, SecCSFlags(), &code) == errSecSuccess else {
             return nil
@@ -108,20 +111,28 @@ private struct XPCClientCodeSignatureValidator {
     }
 
     private static func currentProcessIdentity() -> XPCClientIdentity? {
-        var code: SecCode?
-        guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess,
-              let code else { return nil }
-        return identity(for: code)
+        var runningCode: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &runningCode) == errSecSuccess,
+              let runningCode else { return nil }
+        return identity(forRunningCode: runningCode)
     }
 
-    private static func identity(for code: SecCode) -> XPCClientIdentity? {
+    private static func identity(forRunningCode runningCode: SecCode) -> XPCClientIdentity? {
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(runningCode, SecCSFlags(), &staticCode) == errSecSuccess,
+              let staticCode else { return nil }
+
         var information: CFDictionary?
-        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
-              let values = information as? [String: Any],
-              let identifier = values[kSecCodeInfoIdentifier as String] as? String,
-              let teamIdentifier = values[kSecCodeInfoTeamIdentifier as String] as? String,
-              !identifier.isEmpty,
-              !teamIdentifier.isEmpty else {
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information
+        ) == errSecSuccess,
+        let values = information as? [String: Any],
+        let identifier = values[kSecCodeInfoIdentifier as String] as? String,
+        let teamIdentifier = values[kSecCodeInfoTeamIdentifier as String] as? String,
+        !identifier.isEmpty,
+        !teamIdentifier.isEmpty else {
             return nil
         }
 
