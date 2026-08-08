@@ -1,131 +1,258 @@
 # Advanced Observability feasibility — B0
 
-Status: **capability spike GO; production content-filter architecture NO-GO pending a supported evidence handoff.**
+Status: **GO for a signed real-Mac prototype; not yet production-accepted.**
 
-This document records the B0 result for application-level network observability on macOS. It does not change the evidence level of the lightweight core tracker.
+This document records the B0 result for application-level network observability on macOS. It does not change the evidence level of the lightweight core tracker until the signed provider is activated and validated on real hardware.
 
 ## Decision
 
-Apple's macOS Content Filter APIs are useful for proving two important capabilities inside a Filter Data Provider:
+A macOS `NEFilterDataProvider` packaged as a **system extension** remains the preferred B1 prototype path.
 
-- `NEFilterFlow.sourceAppIdentifier` can identify the application associated with an observed flow when available;
-- `NEFilterReport` / statistics reporting can expose inbound and outbound byte counts to the provider.
+The real macOS 15.5 SDK used by CI established the important platform-specific shape:
 
-However, the originally proposed production path cannot currently satisfy Traffic Monitoring's product requirement of durable, app-visible evidence:
+- `NEFilterFlow.sourceAppIdentifier` is unavailable on macOS;
+- `NEFilterFlow.sourceAppAuditToken` **does compile on macOS**;
+- the audit token can be passed to Security Code Signing APIs to resolve a signing identifier, falling back to `Unknown application`;
+- `NEFilterNewFlowVerdict` can request low-frequency statistics reports;
+- `NEFilterReport` exposes inbound/outbound byte counts inside the provider;
+- `NEFilterControlProvider` is unavailable on macOS in this SDK and is not part of the design;
+- a Network Extension system extension requires its own `main.swift` and `NEProvider.startSystemExtensionMode()` entry point;
+- a dedicated Mach/XPC service can be declared through `NEMachServiceName` and compiled inside the system-extension process;
+- the main Traffic Monitoring app now contains an XPC client for that service.
 
-1. the Filter Data Provider runs in a restrictive sandbox that blocks normal network access, IPC and disk writes;
-2. the real macOS SDK used by CI marks `NEFilterControlProvider` unavailable on macOS, so the generic Data Provider → Control Provider → shared store design cannot be used as our macOS evidence-export bridge;
-3. therefore app attribution may be observable **inside** the data provider, but this B0 spike has not identified a supported, privacy-preserving channel that makes those observations available to the containing Traffic Monitoring app.
+The entire capability spike — provider, audit-token identity resolution, locality classifier, statistics aggregation, system-extension entry point and XPC service — compiles in CI on the same macOS SDK as the app.
 
-The correct B0 decision is consequently:
+The B0 decision is therefore:
 
-> Keep the content-filter target as an isolated capability experiment, keep B1/B2 domain/UI scaffolding experimental, and do not ship or advertise app-level observability until a supported macOS provider-to-app architecture is proven.
+> Proceed to **signed real-Mac B1 validation**, while keeping Advanced Observability optional and experimental. Do not call application byte evidence release-grade until activation, attribution, locality, byte reconciliation, XPC security, coverage and performance gates pass.
 
-## What is technically proven enough for prototyping
-
-### Source application
-
-`NEFilterFlow.sourceAppIdentifier` exposes a source-app identifier for a flow when available. Missing identity must remain `Unknown application`.
-
-### Locality
-
-The experimental domain classifier uses only deterministic IP-literal rules:
-
-- loopback: `127.0.0.0/8`, `::1`, localhost;
-- local network: RFC1918 IPv4, IPv4 link-local, IPv6 link-local and unique-local ranges;
-- external: IP literals outside those ranges;
-- unknown: missing endpoint, hostname-only endpoint, or anything that cannot be classified without creating extra network/DNS activity.
-
-No DNS request is created merely to classify a flow.
-
-### Statistics
-
-The Data Provider can request low-frequency statistics reports. These reports can contain inbound and outbound flow byte counts. This is useful for a controlled B1 experiment, but byte accounting remains `notValidated` until it can be reconciled against controlled transfers and delivered through a supported host-app architecture.
-
-## Platform boundary discovered by CI
-
-The B0 spike deliberately compiles against the same macOS SDK as the app CI.
-
-That validation produced a decisive platform result:
+## Architecture selected for the prototype
 
 ```text
-'NEFilterControlProvider' is unavailable in macOS
+Traffic Monitoring.app
+        │
+        │ NSXPCConnection
+        ▼
+NEMachServiceName
+        │
+        ▼
+TrafficMonitoringFilterDataProvider.systemextension
+        │
+        ├── NEFilterFlow
+        │     ├── sourceAppAuditToken
+        │     └── remote endpoint metadata
+        │
+        ├── Security Code Signing APIs
+        │     └── signing identifier / Unknown application
+        │
+        ├── deterministic locality classifier
+        │     └── loopback / localNetwork / external / unknown
+        │
+        ├── low-frequency NEFilterReport statistics
+        │     └── inbound / outbound byte counters
+        │
+        └── in-memory aggregation
+              └── JSON snapshot over XPC
 ```
 
-This result takes precedence over a generic documentation diagram that describes Data and Control Providers together across platforms.
+No packet payload is required by this architecture.
 
-The experiment therefore contains only the macOS Filter Data Provider system-extension target.
+## Source application
 
-## Data Provider privacy sandbox
+### macOS result
 
-Apple documents the Filter Data Provider as intentionally unable to export observed user network content through normal mechanisms: its sandbox blocks network access, IPC and disk writes.
+Do **not** use `sourceAppIdentifier` on macOS. The compiler rejects it as unavailable.
 
-This is a good privacy property, but it means Traffic Monitoring must not invent an unsupported bridge just to make B2 work.
+The macOS spike instead uses:
 
-## Alternatives considered after the blocker
+```text
+NEFilterFlow.sourceAppAuditToken
+        ↓
+SecCodeCopyGuestWithAttributes
+        ↓
+SecCodeCopyStaticCode
+        ↓
+SecCodeCopySigningInformation
+        ↓
+signing identifier
+```
 
-### Transparent proxy
+If any step fails, identity remains:
 
-A transparent proxy can run on macOS and, as a tunnel-provider family API, has a host/provider messaging channel. It is materially more invasive because the provider participates in the traffic path and flow copying. Apple also documents source-app `NEFlowMetaData` primarily in per-app VPN contexts, so system-wide source attribution for our use case is not yet established.
+```text
+Unknown application
+```
 
-Decision: **research candidate only**, not adopted as a workaround.
+The audit token itself is not part of the durable application evidence model.
 
-### Endpoint Security
+### Still to validate
 
-Endpoint Security provides strong process identity but Apple documents its socket events as UNIX-domain-socket events, not general Internet socket byte accounting.
+On a signed real Mac we must verify identity behavior for:
 
-Decision: **not suitable as the primary traffic evidence source**.
+- Safari / WebKit helper processes;
+- command-line processes;
+- native URLSession apps;
+- XPC/helper processes;
+- short-lived processes;
+- unsigned/ad-hoc signed apps;
+- system traffic;
+- VPN enabled/disabled.
 
-### Packet filter
+Do not automatically merge helper identities into their parent app until a deterministic rule is documented.
 
-A packet filter can observe packets on macOS but does not by itself solve reliable source-application attribution and the host evidence handoff.
+## Locality classification
 
-Decision: **not selected**.
+The prototype uses endpoint metadata only and never creates a DNS request solely for classification.
+
+Current classes:
+
+- `loopback` — loopback IPv4/IPv6;
+- `localNetwork` — RFC1918 IPv4, IPv4 link-local, IPv6 link-local and unique-local addresses;
+- `external` — IP literals outside those ranges;
+- `unknown` — missing endpoint, hostname-only endpoint or anything that cannot be classified deterministically.
+
+`unknown` is a first-class evidence state.
+
+Real-Mac tests must validate the representation returned by `NEFilterSocketFlow` for TCP/UDP, IPv4/IPv6, localhost, LAN and normal Internet traffic.
+
+## Byte accounting
+
+For accepted flows the Data Provider requests:
+
+```text
+shouldReport = true
+statisticsReportFrequency = .low
+```
+
+The provider receives statistics reports and calculates deltas from the latest reported inbound + outbound byte counts for each flow identifier.
+
+Current product state remains:
+
+```text
+ByteAccountingCapability.notValidated
+```
+
+The Applications UI therefore treats flow counts as experimental evidence and does not present byte values as authoritative until controlled-transfer reconciliation passes.
+
+## macOS provider-to-app communication
+
+The initial generic design assumed a `NEFilterControlProvider`. CI proved that class is unavailable for the macOS target, so it was removed.
+
+The macOS-specific prototype instead uses a system-extension Mach/XPC service:
+
+```text
+Info.plist
+NEMachServiceName = group.com.daniele21.trafficmonitoring.advanced-observability
+```
+
+The system-extension entry point calls `NEProvider.startSystemExtensionMode()` before starting the custom XPC listener. The app uses `NSXPCConnection` to request an already-aggregated JSON snapshot.
+
+This is intentionally one-way evidence export: the provider sends aggregate application/locality statistics, not payload content.
+
+### Security gate
+
+The current XPC listener is a **capability spike**. Before production it must reject callers whose code-signing identity does not match the expected Traffic Monitoring client requirement.
+
+No release claim depends on the XPC bridge until that validation exists.
+
+## Important macOS vs iOS sandbox distinction
+
+Apple's general Content Filter documentation describes a very restrictive Filter Data Provider sandbox that blocks network, IPC and disk write operations. Apple DTS has clarified on the Developer Forums that this description was written before macOS filter-provider system extensions and that the quoted restriction does not apply in the same way to a macOS Network Extension system extension.
+
+For Traffic Monitoring this means:
+
+- do not assume iOS Data Provider architecture applies unchanged to macOS;
+- validate macOS behavior on real signed builds;
+- keep payloads out of IPC by product policy even if the macOS system-extension process technically permits IPC.
+
+## Distribution / activation
+
+Directly distributed macOS Network Extensions require additional packaging/signing work beyond the normal ad-hoc CI `.app`:
+
+- Network Extension entitlement;
+- system-extension packaging;
+- Developer ID provisioning for direct distribution;
+- `-systemextension` entitlement variant where required for Developer ID distribution;
+- host-app system-extension installation capability;
+- user approval / activation flow;
+- content-filter configuration through `NEFilterManager`;
+- notarized final packaging.
+
+The existing downloadable CI app remains a safe core build. It does not pretend that an ad-hoc signature can activate the provider.
 
 ## B0 gate matrix
 
 | Gate | Result | Notes |
 |---|---|---|
-| Source app identity inside provider | GO for prototype | explicit unknown remains required |
-| Local/external deterministic classification | GO for IP literals | hostname/missing endpoint stays unknown |
-| Flow statistics available inside provider | GO for experiment | accounting not release-validated |
-| Payload persistence avoidable | GO | provider need not inspect/store payloads |
-| Base app independent | GO | advanced track remains optional |
-| macOS Data Provider packaging | GO for spike | system extension |
-| Supported provider → host evidence bridge | **NO-GO** | current blocking item |
-| Per-app durable analytics | **BLOCKED** | depends on supported bridge |
-| Real-Mac performance | OPEN | cannot accept release gate yet |
-| Signing/notarization/approval | OPEN | ad-hoc CI cannot prove activation |
+| macOS Data Provider system-extension build | **GO** | compiles in CI |
+| system-extension entry point | **GO** | `startSystemExtensionMode()` |
+| source app primitive | **GO for prototype** | audit token, not `sourceAppIdentifier` |
+| signing-identifier resolution | **GO at compile level** | real-process accuracy still needs testing |
+| local/external classifier | **GO for prototype** | unknown remains explicit |
+| flow statistics API | **GO at compile level** | byte reconciliation still required |
+| XPC provider → app bridge | **GO at compile level** | runtime + client validation still required |
+| payload-free design | **GO** | aggregate metadata only |
+| base app independent | **GO** | Advanced mode remains opt-in |
+| signed real-Mac activation | **OPEN** | cannot be proven by ad-hoc CI |
+| attribution accuracy matrix | **OPEN** | B1 real-Mac gate |
+| byte-accounting reconciliation | **OPEN** | B1 real-Mac gate |
+| XPC client authentication | **OPEN** | required before production |
+| provider coverage semantics | **OPEN** | required before audit conclusions |
+| performance / wakeups | **OPEN** | required before always-on release |
+| notarized distribution | **OPEN** | production packaging gate |
 
-## Effect on B1 and B2
+## Effect on B1
 
-B1 may contain platform-independent domain models, deterministic locality rules and the isolated Data Provider capability spike. It must not claim that the normal app receives real provider evidence.
+B1 may now proceed as a **signed prototype**.
 
-B2 may contain the opt-in `Applications` UI and provider-state UX so the product path is testable. In regular builds it must show `Provider unavailable` rather than fake application rows.
+Implemented prototype pieces:
 
-The `Applications` UI may only show authoritative byte values after:
+- application evidence domain models;
+- audit-token source identity path;
+- deterministic locality classifier;
+- statistics-report delta accumulation;
+- in-memory per-app aggregation;
+- provider XPC snapshot service;
+- main-app XPC client;
+- explicit stale/unavailable/unknown states.
 
-1. a supported provider-to-app evidence channel is selected;
-2. real source-app/locality tests pass;
-3. byte accounting reconciles under controlled traffic;
-4. coverage and stale-provider semantics are validated;
-5. distribution/approval/performance gates pass.
+B1 is not accepted as complete until real-Mac tests prove attribution and byte accounting.
 
-## Next B0 research question
+## Effect on B2
 
-The next architecture spike is narrowly defined:
+The B2 product surface exists behind explicit opt-in:
 
-> Is there a supported macOS Network Extension architecture that provides system-wide source-application flow metadata, aggregate byte accounting, and a supported host-app communication path without forcing Traffic Monitoring to become a full traffic proxy?
+```text
+Analytics
+Applications    experimental / opt-in
+Monitor
+```
 
-Until that is answered positively, the product remains a strong network-level observability tool and Advanced Observability remains experimental scaffolding.
+Normal ad-hoc builds can safely show `Provider unavailable`; they never invent app rows.
+
+When a signed provider is running, the app prefers the system-extension XPC snapshot. Byte values become authoritative only after the byte capability is promoted from `notValidated` to `validated` by the B1 gate.
+
+## Next validation sequence
+
+1. embed/sign the system extension in a dedicated signed development build;
+2. activate it with macOS user approval;
+3. configure `NEFilterManager` for socket filtering;
+4. verify the XPC Mach service at runtime;
+5. validate audit-token → signing-identifier mapping;
+6. run controlled local / LAN / Internet transfers;
+7. reconcile statistics bytes against controlled transfer sizes and core interface counters;
+8. verify VPN/helper/WebKit/system-process cases;
+9. measure idle CPU, wakeups and high-throughput overhead;
+10. add XPC code-signing client validation;
+11. only then decide whether B1/B2 are production-accepted.
 
 ## Apple references
 
-- https://developer.apple.com/documentation/networkextension/nefilterflow/sourceappidentifier
-- https://developer.apple.com/documentation/networkextension/nefilterreport
-- https://developer.apple.com/documentation/networkextension/nefilternewflowverdict/statisticsreportfrequency
-- https://developer.apple.com/documentation/networkextension/nefilterprovider
-- https://developer.apple.com/documentation/networkextension/nefilterproviderconfiguration/filterdataproviderbundleidentifier
-- https://developer.apple.com/documentation/technotes/tn3134-network-extension-provider-deployment
-- https://developer.apple.com/documentation/networkextension/netransparentproxyprovider
-- https://developer.apple.com/documentation/networkextension/neflowmetadata
+- `NEProvider.startSystemExtensionMode()`
+- `NEFilterFlow.sourceAppAuditToken`
+- `NEFilterReport`
+- `NEFilterNewFlowVerdict.statisticsReportFrequency`
+- `NEFilterSocketFlow`
+- `NEFilterProviderConfiguration.filterDataProviderBundleIdentifier`
+- TN3134 — Network Extension provider deployment
+- Apple Developer Forums guidance on macOS Network Extension system extensions and XPC
