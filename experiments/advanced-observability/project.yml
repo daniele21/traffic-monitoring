@@ -11,7 +11,7 @@ targets:
     type: system-extension
     platform: macOS
     sources:
-      - path: Sources/FilterDataProvider.swift
+      - path: Sources
     dependencies:
       - sdk: NetworkExtension.framework
     settings:
