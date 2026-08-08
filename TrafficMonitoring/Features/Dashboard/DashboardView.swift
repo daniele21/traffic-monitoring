@@ -3,6 +3,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @ObservedObject var diagnostics: DiagnosticsViewModel
+    let usageStore: LocalUsageStore
     @State private var section: DashboardSection = .analytics
 
     var body: some View {
@@ -30,13 +31,13 @@ struct DashboardView: View {
 
             switch section {
             case .analytics:
-                SessionAnalyticsView(diagnostics: diagnostics)
+                PersistentAnalyticsView(diagnostics: diagnostics, store: usageStore)
             case .monitor:
                 monitorView
             }
         }
         .padding(24)
-        .frame(minWidth: 980, minHeight: 640)
+        .frame(minWidth: 1040, minHeight: 680)
     }
 
     private var monitorView: some View {
@@ -85,7 +86,7 @@ private enum DashboardSection: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .analytics:
-            "See how much data this Mac has used and which networks used it."
+            "Cumulative local history, trends and usage by network."
         case .monitor:
             "Live technical view of the interfaces currently being measured."
         }
