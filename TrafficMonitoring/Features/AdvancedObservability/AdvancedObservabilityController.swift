@@ -12,11 +12,17 @@ final class AdvancedObservabilityController: ObservableObject {
     @Published private(set) var lastError: String?
 
     private let defaults: UserDefaults
+    private let xpcClient: AdvancedObservabilityXPCClient
     private let prototypeBridge: AdvancedObservabilityPrototypeBridge
     private var timer: Timer?
 
-    init(defaults: UserDefaults = .standard, prototypeBridge: AdvancedObservabilityPrototypeBridge = AdvancedObservabilityPrototypeBridge()) {
+    init(
+        defaults: UserDefaults = .standard,
+        xpcClient: AdvancedObservabilityXPCClient = AdvancedObservabilityXPCClient(),
+        prototypeBridge: AdvancedObservabilityPrototypeBridge = AdvancedObservabilityPrototypeBridge()
+    ) {
         self.defaults = defaults
+        self.xpcClient = xpcClient
         self.prototypeBridge = prototypeBridge
         isEnabled = defaults.bool(forKey: Self.enabledDefaultsKey)
         snapshot = AdvancedObservabilitySnapshot(providerState: .disabled, byteAccounting: .notValidated, applications: [], lastObservedAt: nil)
@@ -34,15 +40,15 @@ final class AdvancedObservabilityController: ObservableObject {
         case .disabled:
             "Advanced app-level observation is off. Normal network analytics continue unchanged."
         case .providerUnavailable:
-            "The current macOS content-filter spike can observe app flow metadata inside its provider, but B0 found no supported provider-to-app evidence channel for this product architecture. Core tracking remains available."
+            "The Advanced Observability system extension is not running or this build cannot activate it. Core network analytics continue normally."
         case .awaitingApproval:
-            "A future supported advanced provider would still require macOS approval before observation can start."
+            "macOS approval is required before the Advanced Observability system extension can start."
         case .active:
             byteAccounting == .validated
-                ? "Prototype application evidence is active with validated byte accounting."
-                : "Prototype application evidence is active. Byte accounting is not release-validated."
+                ? "Application attribution is active with validated byte accounting."
+                : "Application attribution is active. Flow byte accounting is still experimental and is not presented as release-validated evidence."
         case .degraded:
-            "Prototype evidence is stale or incomplete, so no definitive app-level conclusion should be drawn."
+            "Advanced evidence is stale or incomplete, so no definitive app-level conclusion should be drawn."
         }
     }
 
@@ -70,30 +76,57 @@ final class AdvancedObservabilityController: ObservableObject {
             return
         }
 
-        do {
-            guard let loaded = try prototypeBridge.loadSnapshot() else {
-                snapshot = AdvancedObservabilitySnapshot(providerState: .providerUnavailable, byteAccounting: .notValidated, applications: [], lastObservedAt: nil, generatedAt: now)
-                bridgeStatus = "B0 platform bridge blocked"
-                lastError = nil
-                return
+        bridgeStatus = "Connecting to system extension"
+        xpcClient.loadSnapshot { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case let .success(loaded):
+                    if let loaded {
+                        self.apply(loaded, now: Date(), bridge: "System extension · XPC")
+                    } else {
+                        self.applyUnavailable(now: Date(), message: nil)
+                    }
+                case let .failure(error):
+                    // A file snapshot remains available solely for deterministic B2 UI
+                    // development; real provider evidence always prefers XPC.
+                    if let prototype = try? self.prototypeBridge.loadSnapshot() {
+                        self.apply(prototype, now: Date(), bridge: "Developer prototype snapshot")
+                    } else {
+                        self.applyUnavailable(now: Date(), message: error.localizedDescription)
+                    }
+                }
             }
+        }
+    }
 
-            let age = now.timeIntervalSince(loaded.generatedAt)
-            let state: AdvancedObservabilityProviderState = age <= 20 ? loaded.providerState : .degraded
-            snapshot = AdvancedObservabilitySnapshot(providerState: state, byteAccounting: loaded.byteAccounting, applications: loaded.applications, lastObservedAt: loaded.lastObservedAt, generatedAt: loaded.generatedAt)
-            bridgeStatus = "Developer prototype snapshot"
-            lastError = nil
-        } catch {
-            snapshot = AdvancedObservabilitySnapshot(providerState: .degraded, byteAccounting: .notValidated, applications: [], lastObservedAt: nil, generatedAt: now)
-            bridgeStatus = "Prototype snapshot read failed"
-            lastError = error.localizedDescription
+    private func apply(_ loaded: AdvancedObservabilitySnapshot, now: Date, bridge: String) {
+        let age = now.timeIntervalSince(loaded.generatedAt)
+        let state: AdvancedObservabilityProviderState = age <= 20 ? loaded.providerState : .degraded
+        snapshot = AdvancedObservabilitySnapshot(
+            providerState: state,
+            byteAccounting: loaded.byteAccounting,
+            applications: loaded.applications,
+            lastObservedAt: loaded.lastObservedAt,
+            generatedAt: loaded.generatedAt
+        )
+        bridgeStatus = bridge
+        lastError = nil
+    }
+
+    private func applyUnavailable(now: Date, message: String?) {
+        snapshot = AdvancedObservabilitySnapshot(providerState: .providerUnavailable, byteAccounting: .notValidated, applications: [], lastObservedAt: nil, generatedAt: now)
+        bridgeStatus = "Provider unavailable"
+        // Connection absence is a supported state in normal/ad-hoc builds, not a red error.
+        lastError = nil
+        if let message, message.localizedCaseInsensitiveContains("invalid") {
+            lastError = message
         }
     }
 }
 
-/// Development-only handoff for deterministic B1/B2 UI tests.
-/// It is deliberately not presented as a production Network Extension IPC path:
-/// Apple's filter data provider sandbox blocks disk writes and IPC on macOS.
+/// Development-only fallback for deterministic B2 UI tests. It is not Network
+/// Extension IPC and normal builds never synthesize sample application rows.
 struct AdvancedObservabilityPrototypeBridge {
     static let fileName = "advanced-observability-prototype.json"
     private let fileManager: FileManager
