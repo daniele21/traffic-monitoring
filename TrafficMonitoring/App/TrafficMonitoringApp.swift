@@ -13,10 +13,13 @@ struct TrafficMonitoringApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Network Usage", id: "analytics") {
-            DashboardView(diagnostics: model.diagnostics)
-                .task { model.start() }
+            DashboardView(
+                diagnostics: model.diagnostics,
+                usageStore: model.usageStore
+            )
+            .task { model.start() }
         }
-        .defaultSize(width: 1080, height: 700)
+        .defaultSize(width: 1160, height: 760)
 
         Window("Settings", id: "settings") {
             SettingsView(locationAuthorization: model.locationAuthorization)
