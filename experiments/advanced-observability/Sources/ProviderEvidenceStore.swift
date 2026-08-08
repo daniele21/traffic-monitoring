@@ -1,0 +1,167 @@
+import Foundation
+import Network
+import NetworkExtension
+import Security
+
+final class ProviderEvidenceStore {
+    static let shared = ProviderEvidenceStore()
+
+    private struct FlowState {
+        let applicationIdentifier: String
+        let locality: String
+        var reportedBytes: UInt64
+    }
+
+    private struct AppAggregate: Codable {
+        let applicationIdentifier: String
+        var loopbackFlows: Int = 0
+        var localNetworkFlows: Int = 0
+        var externalFlows: Int = 0
+        var unknownFlows: Int = 0
+        var loopbackBytes: UInt64 = 0
+        var localNetworkBytes: UInt64 = 0
+        var externalBytes: UInt64 = 0
+        var unknownBytes: UInt64 = 0
+        var accountedBytes: UInt64 = 0
+        var hasCompleteByteAccounting: Bool = true
+        var lastObservedAt: Date
+    }
+
+    private struct Snapshot: Codable {
+        let providerState: String
+        let byteAccounting: String
+        let applications: [AppAggregate]
+        let lastObservedAt: Date?
+        let generatedAt: Date
+    }
+
+    private let queue = DispatchQueue(label: "com.daniele21.trafficmonitoring.provider-evidence")
+    private var flows: [UUID: FlowState] = [:]
+    private var applications: [String: AppAggregate] = [:]
+
+    private init() {}
+
+    func register(flow: NEFilterFlow, observedAt: Date = Date()) {
+        let identity = ApplicationIdentityResolver.signingIdentifier(from: flow.sourceAppAuditToken) ?? "Unknown application"
+        let locality = LocalityClassifier.classify(flow: flow)
+
+        queue.sync {
+            guard flows[flow.identifier] == nil else { return }
+            flows[flow.identifier] = FlowState(applicationIdentifier: identity, locality: locality, reportedBytes: 0)
+            var aggregate = applications[identity] ?? AppAggregate(applicationIdentifier: identity, lastObservedAt: observedAt)
+            incrementFlowCount(&aggregate, locality: locality)
+            aggregate.lastObservedAt = max(aggregate.lastObservedAt, observedAt)
+            applications[identity] = aggregate
+        }
+    }
+
+    func record(report: NEFilterReport, observedAt: Date = Date()) {
+        guard report.event == .statistics, let flow = report.flow else { return }
+        let total = saturatingAdd(UInt64(max(0, report.bytesInboundCount)), UInt64(max(0, report.bytesOutboundCount)))
+
+        queue.sync {
+            if flows[flow.identifier] == nil {
+                let identity = ApplicationIdentityResolver.signingIdentifier(from: flow.sourceAppAuditToken) ?? "Unknown application"
+                let locality = LocalityClassifier.classify(flow: flow)
+                flows[flow.identifier] = FlowState(applicationIdentifier: identity, locality: locality, reportedBytes: 0)
+                var aggregate = applications[identity] ?? AppAggregate(applicationIdentifier: identity, lastObservedAt: observedAt)
+                incrementFlowCount(&aggregate, locality: locality)
+                applications[identity] = aggregate
+            }
+
+            guard var state = flows[flow.identifier] else { return }
+            let delta = total >= state.reportedBytes ? total - state.reportedBytes : total
+            state.reportedBytes = total
+            flows[flow.identifier] = state
+
+            var aggregate = applications[state.applicationIdentifier] ?? AppAggregate(applicationIdentifier: state.applicationIdentifier, lastObservedAt: observedAt)
+            aggregate.accountedBytes = saturatingAdd(aggregate.accountedBytes, delta)
+            addBytes(&aggregate, locality: state.locality, bytes: delta)
+            aggregate.lastObservedAt = max(aggregate.lastObservedAt, observedAt)
+            applications[state.applicationIdentifier] = aggregate
+        }
+    }
+
+    func snapshotData(now: Date = Date()) -> Data? {
+        queue.sync {
+            let values = applications.values.sorted { $0.applicationIdentifier.localizedCaseInsensitiveCompare($1.applicationIdentifier) == .orderedAscending }
+            let snapshot = Snapshot(
+                providerState: "active",
+                byteAccounting: "notValidated",
+                applications: values,
+                lastObservedAt: values.map(\.lastObservedAt).max(),
+                generatedAt: now
+            )
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.sortedKeys]
+            return try? encoder.encode(snapshot)
+        }
+    }
+
+    private func incrementFlowCount(_ app: inout AppAggregate, locality: String) {
+        switch locality {
+        case "loopback": app.loopbackFlows += 1
+        case "localNetwork": app.localNetworkFlows += 1
+        case "external": app.externalFlows += 1
+        default: app.unknownFlows += 1
+        }
+    }
+
+    private func addBytes(_ app: inout AppAggregate, locality: String, bytes: UInt64) {
+        switch locality {
+        case "loopback": app.loopbackBytes = saturatingAdd(app.loopbackBytes, bytes)
+        case "localNetwork": app.localNetworkBytes = saturatingAdd(app.localNetworkBytes, bytes)
+        case "external": app.externalBytes = saturatingAdd(app.externalBytes, bytes)
+        default: app.unknownBytes = saturatingAdd(app.unknownBytes, bytes)
+        }
+    }
+
+    private func saturatingAdd(_ lhs: UInt64, _ rhs: UInt64) -> UInt64 {
+        let (value, overflow) = lhs.addingReportingOverflow(rhs)
+        return overflow ? UInt64.max : value
+    }
+}
+
+private enum ApplicationIdentityResolver {
+    static func signingIdentifier(from auditToken: Data?) -> String? {
+        guard let auditToken, !auditToken.isEmpty else { return nil }
+        let attributes = [kSecGuestAttributeAudit as String: auditToken] as CFDictionary
+        var code: SecCode?
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, SecCSFlags(), &code) == errSecSuccess,
+              let code else { return nil }
+
+        var information: CFDictionary?
+        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
+        guard SecCodeCopySigningInformation(code, flags, &information) == errSecSuccess,
+              let dictionary = information as? [String: Any] else { return nil }
+        return dictionary[kSecCodeInfoIdentifier as String] as? String
+    }
+}
+
+private enum LocalityClassifier {
+    static func classify(flow: NEFilterFlow) -> String {
+        guard let socket = flow as? NEFilterSocketFlow,
+              let endpoint = socket.remoteEndpoint else { return "unknown" }
+        guard case let .hostPort(host, _) = endpoint else { return "unknown" }
+        return classify(host: String(describing: host))
+    }
+
+    static func classify(host raw: String) -> String {
+        let host = raw.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if host == "localhost" || host == "::1" || host.hasPrefix("127.") { return "loopback" }
+
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false).compactMap { Int($0) }
+        if parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) {
+            if parts[0] == 10 { return "localNetwork" }
+            if parts[0] == 172 && (16...31).contains(parts[1]) { return "localNetwork" }
+            if parts[0] == 192 && parts[1] == 168 { return "localNetwork" }
+            if parts[0] == 169 && parts[1] == 254 { return "localNetwork" }
+            return "external"
+        }
+
+        if host.hasPrefix("fe8") || host.hasPrefix("fe9") || host.hasPrefix("fea") || host.hasPrefix("feb") || host.hasPrefix("fc") || host.hasPrefix("fd") { return "localNetwork" }
+        if host.contains(":") { return "external" }
+        return "unknown"
+    }
+}
