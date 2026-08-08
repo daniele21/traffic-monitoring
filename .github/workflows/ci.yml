@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "agent/**"]
+  pull_request:
+
+jobs:
+  macos-build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Swift core tests
+        run: swift test
+      - name: Xcode build and tests
+        run: |
+          xcodebuild \
+            -project TrafficMonitoring.xcodeproj \
+            -scheme TrafficMonitoring \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build test
