@@ -19,7 +19,7 @@ struct TrafficMonitoringApp: App {
         .defaultSize(width: 1080, height: 700)
 
         Window("Settings", id: "settings") {
-            SettingsView()
+            SettingsView(locationAuthorization: model.locationAuthorization)
         }
         .windowResizability(.contentSize)
     }
