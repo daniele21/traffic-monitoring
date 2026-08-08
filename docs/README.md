@@ -24,12 +24,19 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. `adr/0001-advanced-observability-content-filter.md` only when revisiting the architecture decision
 4. `local-first-observability-plan.md` for the broader roadmap
 
-B0 is **GO for a signed real-Mac prototype**, not production acceptance. The provider → app XPC path, audit-token identity path, locality classification, statistics aggregation and Applications UI compile in CI. No agent may present per-app evidence as release-validated until signed activation, controlled-transfer reconciliation, coverage, XPC authentication and performance gates pass.
+B0 is **GO for a signed real-Mac prototype**, not production acceptance. The provider → app XPC path, client code-signature authentication, audit-token identity path, locality classification, statistics aggregation, runtime diagnostics and Applications UI compile in CI. No agent may present per-app evidence as release-validated until signed activation, controlled-transfer reconciliation, coverage and performance gates pass.
 
 ### Running the app without Xcode
 
 1. `run-without-xcode.md`
 2. `m1-validation.md` only when validating measurement behavior
+
+### Running signed Advanced Observability validation
+
+1. `advanced-observability-signed-runbook.md` for operational build/activation/preflight steps
+2. `testing.md` for the authoritative B1/B2 acceptance matrix
+3. `b0-b2-implementation-status.md` when recording what actually passed
+4. `advanced-observability-feasibility.md` only if the platform architecture itself behaves differently than expected
 
 ### Implementing the next core milestone
 
@@ -95,6 +102,7 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 - `a0-a2-implementation-status.md` — compact implementation/status view for repository positioning, evidence quality, and export.
 - `b0-b2-implementation-status.md` — compact current status of Advanced Observability implementation and remaining validation gates.
 - `advanced-observability-feasibility.md` — B0 macOS feasibility result, prototype architecture, signing/distribution and evidence-source constraints.
+- `advanced-observability-signed-runbook.md` — operational preflight, activation, runtime diagnostics, controlled validation and cleanup for the signed B1/B2 prototype.
 - `adr/0001-advanced-observability-content-filter.md` — accepted architecture for signed prototype validation; production acceptance remains gated.
 - `brand.md` — approved visual identity, palette, typography, product language, and chart styling.
 
@@ -109,7 +117,7 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 - `evidence-export.md` — versioned JSON/CSV network-evidence export contract and privacy boundary.
 - `ux.md` — menu-bar and dashboard information architecture.
 - `implementation-plan.md` — current lightweight product delivery plan with acceptance gates.
-- `testing.md` — unit/integration/manual validation strategy.
+- `testing.md` — unit/integration/manual validation strategy, including the signed B1/B2 matrix.
 - `decisions.md` — compact architectural decision log.
 
 ## Authority rule
@@ -122,6 +130,8 @@ When documents overlap:
 - A0–A2 implementation status → `a0-a2-implementation-status.md`;
 - B0–B2 current status → `b0-b2-implementation-status.md`;
 - B0 platform feasibility → `advanced-observability-feasibility.md`;
+- signed B1/B2 operational procedure → `advanced-observability-signed-runbook.md`;
+- B1/B2 acceptance matrix → `testing.md`;
 - export schema → `evidence-export.md`;
 - future app/locality/audit evolution → `local-first-observability-plan.md`;
 - visual identity → `brand.md`;
