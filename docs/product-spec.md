@@ -1,6 +1,6 @@
 # Product specification
 
-This document defines the **current lightweight product**. Strategic positioning lives in `positioning.md`. Future application-level/locality observability is gated by `local-first-observability-plan.md` and is not part of the current v1 contract.
+This document defines the **current lightweight product**. Strategic positioning lives in `positioning.md`. Future application-level/locality observability is gated by `local-first-observability-plan.md` and is not part of the current contract.
 
 ## Problem
 
@@ -11,6 +11,8 @@ macOS exposes current network activity but does not provide a simple persistent 
 - Which Wi-Fi networks account for most usage?
 - How much was download versus upload?
 - When did usage peak?
+- Was the app actually observing for the whole selected period?
+- How confidently was a network identified?
 
 The app should answer those questions locally, continuously, and with minimal overhead.
 
@@ -18,11 +20,11 @@ There is also a broader strategic problem:
 
 > Local-first products increasingly make claims about keeping work close to the user, but those claims are difficult to observe with simple end-user tooling.
 
-Traffic Monitoring addresses the first problem today and establishes a privacy-minimized evidence foundation that may support the second problem later.
+Traffic Monitoring addresses network-level evidence today and creates a privacy-minimized foundation that may support stronger observability later.
 
 ## Current product statement
 
-> **Local network observability for macOS:** a privacy-first menu-bar utility that records physical-interface usage over time, attributes it to network context, and provides local historical analytics by period and network.
+> **Local network observability for macOS:** a privacy-first menu-bar utility that records physical-interface usage over time, attributes it to network context, reports observation quality, and provides local historical analytics and user-controlled evidence export.
 
 ## Strategic direction
 
@@ -32,24 +34,27 @@ The current product measures network-level evidence. A future optional advanced 
 
 See `positioning.md` for messaging and `local-first-observability-plan.md` for the gated evolution plan.
 
-## Current/v1 user outcomes
+## Current user outcomes
 
 The user can:
 
 1. Install and launch the app without creating an account.
 2. Keep it running from the menu bar.
-3. See live download/upload rate for the current physical network usage.
+3. See live download/upload rate for current physical network usage.
 4. Keep cumulative historical usage locally across relaunches.
 5. See total/download/upload for a selected period.
-6. View usage trends over time.
-7. Inspect usage peaks for the selected timeframe.
-8. Compare usage grouped by detected network identity.
-9. Filter or inspect common periods such as Today, 7D, 30D, Month, All Time, and custom ranges where implemented.
-10. Identify likely Personal Hotspot/expensive usage via path metadata such as `isExpensive`.
-11. Continue recording bytes even when SSID permission is unavailable.
-12. Use a separate technical Monitor to understand live interface measurement without confusing raw counters with cumulative analytics.
-13. Run without a cloud account or remote analytics backend.
-14. Start automatically at login when login-item support is implemented and enabled.
+6. View usage trends and peaks over time.
+7. Compare usage grouped by detected network identity.
+8. Use Today, 7 days, 30 days, This month, All time, and custom ranges.
+9. Identify likely Personal Hotspot/expensive usage via `isExpensive` metadata.
+10. Continue recording bytes when SSID permission is unavailable while explicitly labeling network identity as unknown.
+11. See evidence quality and observation coverage for the selected period.
+12. Distinguish healthy observation, metadata-degraded time, tracking-degraded time, and unobserved gaps.
+13. Assign persistent friendly aliases such as `Home`, `Office`, or `iPhone` without changing canonical identity.
+14. Drill into one network for total/download/upload, first/last observation, peak interval, trend, and path metadata.
+15. Preview and save a versioned JSON or CSV evidence export for the selected Analytics period.
+16. Use a separate technical Monitor without confusing raw counters with cumulative analytics.
+17. Run without a cloud account or remote analytics backend.
 
 ## Two audiences
 
@@ -63,15 +68,15 @@ The core app should remain simple and valuable for this audience indefinitely.
 
 ### Local-first builder
 
-Strategic need:
+Primary need today:
 
-> Collect trustworthy network evidence while testing privacy-first/local-first applications.
+> Collect reproducible network-level evidence while testing privacy-first/local-first applications.
 
-Current v1 provides network-context evidence only. Per-application/locality evidence is a future, explicitly gated track.
+Current evidence can describe observed interface/network-context behavior and coverage. It cannot yet prove source application or Internet locality.
 
 ## What is measured
 
-The canonical current metric is bytes transferred by tracked physical network interfaces while the app is running:
+The canonical current metric is bytes transferred by tracked physical network interfaces while the app is observing:
 
 - download = received interface bytes;
 - upload = transmitted interface bytes;
@@ -79,13 +84,15 @@ The canonical current metric is bytes transferred by tracked physical network in
 
 This is **network-interface usage**, not guaranteed carrier-billable Internet traffic.
 
-Local LAN transfers can be included. The UI must not claim exact ISP/mobile-plan billing parity or Internet-only usage from interface counters alone.
+Local LAN transfers can be included. The UI and exports must not claim exact ISP/mobile-plan billing parity or Internet-only usage from interface counters alone.
 
-## Evidence level
+## Evidence model
 
-Current v1 evidence is **interface/network-context evidence**.
+Current evidence has two dimensions.
 
-It can support claims about:
+### Usage evidence
+
+The product can support claims about:
 
 - measured physical-interface byte movement;
 - time and period of observed usage;
@@ -94,7 +101,30 @@ It can support claims about:
 - trends and peaks;
 - expensive/constrained metadata when supplied by macOS.
 
-It cannot currently support definitive claims about:
+### Coverage / quality evidence
+
+For a selected period the product reports:
+
+- selected duration;
+- observed duration;
+- healthy observation duration;
+- metadata-degraded duration;
+- tracking-degraded duration;
+- unknown-network duration;
+- unobserved duration.
+
+Current quality states:
+
+```text
+identified
+partiallyIdentified
+unknownNetwork
+trackingDegraded
+```
+
+Observation gaps are not filled or inferred. Sleep, process termination, crashes, or long sampling gaps remain visible as incomplete coverage.
+
+Current evidence cannot support definitive claims about:
 
 - source application;
 - remote destination;
@@ -103,103 +133,124 @@ It cannot currently support definitive claims about:
 
 ## Attribution
 
-Traffic is attributed to a network identity representing the connection context for the physical interface.
+Traffic is attributed to an immutable network identity representing the connection context for the physical interface.
 
-For Wi-Fi, the preferred identity uses the current SSID plus interface context. SSID access requires Location Services authorization on modern macOS; permission denial is a normal supported state.
+For Wi-Fi, the preferred identity uses the current SSID plus interface context. Permission denial is a supported state and produces an explicit unknown Wi-Fi identity.
 
-For wired connections, use the strongest stable fingerprint available from public APIs and fall back conservatively when identity cannot be established.
+For wired connections, current fallback identity may be interface-level when a stronger network fingerprint is unavailable. Traffic on a weaker identity is represented as partially identified evidence.
 
-For Personal Hotspot, `NWPath.isExpensive` is stored as metadata. It is a useful signal, not the sole definition of a network.
+`NWPath.isExpensive` and `isConstrained` are stored as observations. They are useful path signals, not definitive network classifications.
 
-Unknown or degraded attribution must remain explicit rather than being silently merged into stronger evidence.
+A user alias changes presentation only. It must never rewrite or merge the canonical identity key.
 
 ## Persistence model
 
-Current product direction:
+Current implementation:
 
-- high-frequency counter samples stay ephemeral;
-- valid deltas accumulate in memory;
-- persistence checkpoints are decoupled from sampling cadence;
-- usage is stored in aggregate time buckets rather than one DB row per sample;
-- current implementation uses efficient five-minute usage buckets and periodic checkpoints;
-- local storage is SwiftData;
-- normal relaunch should retain historical analytics.
+```text
+~2 s interface sampling
+      ↓
+validated deltas + coverage heartbeat
+      ↓
+in-memory accumulation
+      ↓
+5-minute aggregate buckets
+      ↓
+~15 s SwiftData checkpoints
+```
 
-Future evidence-quality work may add coverage/health metadata without turning persistence into a high-frequency event log.
+Persisted current concepts:
+
+- network profiles;
+- usage buckets;
+- evidence coverage buckets.
+
+High-frequency raw samples remain ephemeral.
+
+Coverage follows the same low-write principle as usage: heartbeat time accumulates in memory and is checkpointed in aggregate. Long gaps are capped rather than treated as observed time.
+
+A hard crash can still lose a small interval since the last successful checkpoint. The product promises bounded local persistence, not zero-loss crash persistence.
 
 ## Core screens
 
 ### Menu bar
 
-Show compact live status and quick metrics:
-
 - current network name/alias when available;
 - live download/upload rate;
 - quick cumulative usage where useful;
-- open analytics;
-- settings/quit.
+- open Analytics;
+- Settings / Quit.
 
 ### Analytics — Overview
-
-Show:
 
 - total used;
 - downloaded;
 - uploaded;
-- number/ranking of detected networks;
+- detected network count/ranking;
+- evidence quality / coverage;
 - local storage status;
 - selected timeframe.
 
 ### Analytics — Trend
 
-Show:
-
 - usage-over-time chart;
-- automatic useful time granularity;
 - network filter;
-- highest usage hour/day for the selected range;
+- highest usage hour/day;
 - largest network spike;
-- download/upload totals for selected context.
+- selected-context totals.
 
 ### Analytics — Networks
 
-Show:
-
-- network name/identity;
+- network presentation name;
+- evidence/identity quality;
 - connection type;
 - downloaded/uploaded/total;
-- share of selected-period usage;
+- share;
 - last activity;
-- likely expensive/hotspot state where applicable.
+- details action.
 
-Future core work should add network drill-down and explicit evidence-quality/coverage states.
+### Network detail
+
+- total/download/upload;
+- peak interval;
+- identity quality;
+- connection type;
+- first/last observed;
+- likely expensive/hotspot state;
+- constrained state;
+- trend;
+- persistent alias editor.
+
+### About this data
+
+Explain:
+
+- observation coverage;
+- evidence quality;
+- measurement scope;
+- what is and is not measured;
+- current claim limitations.
+
+### Export evidence
+
+The user can preview and locally save JSON or CSV for the selected Analytics period.
+
+Authoritative schema: `evidence-export.md`.
 
 ### Monitor
 
-Keep the technical surface separate from primary analytics.
+Keep raw interface/counter diagnostics separate from product analytics.
 
-It may show:
+## Current non-goals
 
-- interface name;
-- classification;
-- raw cumulative RX/TX;
-- latest delta;
-- SSID/network context;
-- path metadata;
-- tracking health.
-
-Technical labels such as raw counters or interface names should not become the main analytics vocabulary.
-
-## Current v1 non-goals
-
-Do not add these to the lightweight core unless product scope is explicitly changed:
+Do not add these to the lightweight core unless scope is explicitly changed:
 
 - packet payload capture or content inspection;
 - browsing history;
 - persistent destination hosts/DNS history/URLs;
 - per-application traffic attribution;
 - Internet-vs-LAN flow classification;
-- Network Extension / content-filter architecture;
+- Network Extension/content-filter architecture;
 - privileged helper or root daemon;
 - privacy-audit verdicts;
 - cloud account, sync, or remote telemetry;
@@ -208,80 +259,95 @@ Do not add these to the lightweight core unless product scope is explicitly chan
 - iPhone-side usage measurement;
 - bandwidth throttling or firewall controls.
 
-Per-app attribution, locality classification, and audit workflows are not rejected permanently. They belong to the separately gated **Advanced Observability** track in `local-first-observability-plan.md`.
+Per-app attribution, locality classification, and audit workflows belong to the separately gated Advanced Observability track.
+
+## Export contract
+
+A2 export is user-controlled and does not broaden collection.
+
+Current schema v1 can include:
+
+- observation period;
+- aggregate total/download/upload/network count;
+- evidence quality and coverage;
+- canonical network identity;
+- user-facing network name/alias;
+- connection kind;
+- per-network download/upload/total;
+- `isExpensive` / `isConstrained`;
+- network identity quality;
+- first/last observed timestamps;
+- app version;
+- schema version;
+- measurement-scope statement.
+
+It must exclude by default:
+
+- payloads;
+- destinations;
+- DNS/browsing history;
+- BSSID;
+- process/application identity;
+- unrelated device metadata.
 
 ## Privacy position
 
-The current app is local-first by design.
+The app is local-first by design.
 
-Persist only information needed for network-level usage analytics:
+Persist only data necessary for network-level usage, identity presentation, coverage, and evidence export. Export happens only after explicit user action.
 
-- timestamps/time buckets;
-- network identity/display name;
-- interface/type metadata;
-- byte totals;
-- flags such as expensive/constrained;
-- connection/evidence-health metadata when justified.
-
-Do not persist packet contents, request bodies, browsing content, or payloads.
-
-Advanced observability may introduce higher-sensitivity metadata such as app identifiers or endpoints only after a dedicated privacy/data-flow review. The preferred design is classify/aggregate early and avoid long-term raw-flow retention.
+Advanced observability may introduce higher-sensitivity metadata only after a separate privacy/data-flow review.
 
 ## Performance targets
 
-These are engineering targets, not hard external promises:
-
-- idle CPU should remain negligible for a menu-bar utility;
-- sampling must not materially affect battery life;
-- memory should stay small and stable over multi-day runs;
-- persistence should not write on every sample;
+- negligible idle CPU for a menu-bar utility;
+- sampling should not materially affect battery life;
+- stable memory over multi-day runs;
+- no database write per sample;
 - no unbounded raw sample history;
-- dashboard queries for common periods should feel immediate with at least one year of local history;
-- storage growth should remain predictable and modest.
+- predictable storage growth;
+- common Analytics queries should feel immediate with long local history.
 
-Any future advanced system component receives a separate performance budget and must not degrade the lightweight core experience.
-
-## Success criteria for current v1
-
-v1 is ready when all of the following are true:
+## Current success criteria
 
 1. Byte totals remain monotonic and plausible across normal use.
-2. Switching Wi-Fi networks creates correct attribution boundaries when identity is available.
-3. Ethernet and hotspot usage are represented without stopping the tracker.
-4. VPN use does not cause obvious double counting.
-5. Sleep/wake and counter resets do not produce synthetic usage spikes.
-6. Data survives app restart and Mac restart.
-7. Dashboard totals reconcile with stored usage buckets within documented rounding/range semantics.
-8. SSID permission denial still produces usable generic Wi-Fi tracking.
-9. Manual validation against macOS interface counters shows acceptable agreement during controlled transfers.
-10. No sensitive traffic content is collected.
-11. The UI clearly distinguishes live/raw technical counters from historical usage analytics.
-12. The UI does not claim per-app, external-only, or carrier-billing evidence that the current data source cannot provide.
+2. Wi-Fi switches create correct attribution boundaries when identity is available.
+3. Ethernet and hotspot use do not stop tracking.
+4. VPN use does not cause obvious physical/tunnel double counting.
+5. Sleep/wake and counter resets do not create synthetic usage spikes.
+6. Usage survives app/Mac restart within documented checkpoint-loss bounds.
+7. Dashboard totals reconcile with stored/pending usage buckets.
+8. SSID denial produces usable explicit unknown-Wi-Fi evidence.
+9. Evidence coverage does not count long observation gaps as monitored time.
+10. Network aliases preserve canonical identity.
+11. JSON/CSV export totals reconcile with Analytics/network totals.
+12. Export contains only documented schema fields.
+13. No sensitive traffic content is collected or exported.
+14. UI clearly distinguishes raw technical counters from historical evidence.
+15. UI does not claim per-app, external-only, or carrier-billing evidence from current sources.
+16. Controlled real-Mac validation shows acceptable agreement and sensible coverage behavior.
 
-## Near-term core candidates
+## Remaining near-term core work
 
-These strengthen evidence quality without changing the privilege model:
+A0–A2 are implemented on the positioning branch, but release hardening still includes:
 
-- network aliases;
-- network drill-down;
-- observation coverage / data-quality state;
-- CSV export;
-- versioned JSON evidence export;
-- data retention controls;
+- real-Mac coverage validation across Wi-Fi/hotspot/sleep/relaunch;
+- session-aware duration/count if implemented later;
 - richer wired-network fingerprinting;
-- diagnostics bundle for bug reports;
-- mobile-plan budget/reset-day view built on a selected hotspot network.
+- data retention/reset controls;
+- diagnostics bundle;
+- mobile-plan budget/reset-day view if prioritized.
 
 ## Advanced observability candidates
 
-Future only, subject to the gates in `local-first-observability-plan.md`:
+Future only, subject to `local-first-observability-plan.md` gates:
 
 - source-application attribution;
 - local/LAN/external/unknown flow classification;
 - per-app activity timeline;
 - bounded audit sessions;
-- evidence export for a selected application;
+- application evidence export;
 - optional developer/CLI workflows;
 - privacy-regression testing.
 
-These must not be retrofitted into the core tracker by inferring semantics from physical-interface counters.
+These must not be inferred from physical-interface counters.
