@@ -63,11 +63,13 @@ final class DiagnosticsViewModel: ObservableObject {
         do {
             let readings = try counterReader.readCounters()
             let context = await contextProvider.currentSnapshot()
-            let wifiNames = Set(context.wifiSSIDByInterface.keys)
             var nextRows: [DiagnosticInterfaceRow] = []
 
             for reading in readings {
-                let classification = classifier.classify(reading, wifiInterfaceNames: wifiNames)
+                let classification = classifier.classify(
+                    reading,
+                    wifiInterfaceNames: context.wifiInterfaceNames
+                )
                 let identity = identityKey(for: reading.interfaceName, classification: classification, context: context)
                 let contextChanged = previousIdentityByInterface[reading.interfaceName].map { $0 != identity } ?? false
 
