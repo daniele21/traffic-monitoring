@@ -25,9 +25,9 @@ final class AppleNetworkContextProvider: NetworkContextProviding, @unchecked Sen
                 isExpensive: path.isExpensive,
                 isConstrained: path.isConstrained
             )
-            lock.lock()
-            state = newState
-            lock.unlock()
+            lock.withLock {
+                state = newState
+            }
             Logger.context.debug(
                 "Path updated: status=\(String(describing: newState.status), privacy: .public) expensive=\(newState.isExpensive) constrained=\(newState.isConstrained)"
             )
@@ -40,9 +40,7 @@ final class AppleNetworkContextProvider: NetworkContextProviding, @unchecked Sen
     }
 
     func currentSnapshot() async -> NetworkContextSnapshot {
-        lock.lock()
-        let pathState = state
-        lock.unlock()
+        let pathState = lock.withLock { state }
         return NetworkContextSnapshot(
             pathStatus: pathState.status,
             isExpensive: pathState.isExpensive,
