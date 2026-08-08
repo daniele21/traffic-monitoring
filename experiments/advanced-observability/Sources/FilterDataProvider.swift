@@ -15,6 +15,12 @@ final class FilterDataProvider: NEFilterDataProvider {
     }
 
     override func handleNewFlow(_ flow: NEFilterFlow) -> NEFilterNewFlowVerdict {
+        // On macOS `sourceAppIdentifier` is unavailable. B0 tests whether an audit
+        // token is exposed instead; resolving that token into an app identity remains
+        // a separate capability and privacy gate.
+        let hasSourceAppAuditToken = flow.sourceAppAuditToken != nil
+        logger.debug("new flow sourceAppAuditToken=\(hasSourceAppAuditToken, privacy: .public)")
+
         let verdict = NEFilterNewFlowVerdict.allow()
         verdict.shouldReport = true
         verdict.statisticsReportFrequency = .low
@@ -23,7 +29,7 @@ final class FilterDataProvider: NEFilterDataProvider {
 
     override func handle(_ report: NEFilterReport) {
         guard report.event == .statistics else { return }
-        let app = report.flow?.sourceAppIdentifier ?? "unknown-application"
-        logger.debug("statistics app=\(app, privacy: .public) inbound=\(report.bytesInboundCount, privacy: .public) outbound=\(report.bytesOutboundCount, privacy: .public)")
+        let hasSourceAppAuditToken = report.flow?.sourceAppAuditToken != nil
+        logger.debug("statistics sourceAppAuditToken=\(hasSourceAppAuditToken, privacy: .public) inbound=\(report.bytesInboundCount, privacy: .public) outbound=\(report.bytesOutboundCount, privacy: .public)")
     }
 }
