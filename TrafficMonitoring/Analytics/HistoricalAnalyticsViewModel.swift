@@ -77,6 +77,10 @@ final class HistoricalAnalyticsViewModel: ObservableObject {
         try store.renameNetwork(identityKey: identityKey, alias: alias)
     }
 
+    func alias(for identityKey: String) throws -> String? {
+        try store.alias(for: identityKey)
+    }
+
     func detailRow(for identityKey: String) -> NetworkUsageHistoryRow? {
         aggregator.usageByNetwork(currentSnapshots.filter { $0.identityKey == identityKey }).first
     }
