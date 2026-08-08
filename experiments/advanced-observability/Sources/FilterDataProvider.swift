@@ -5,6 +5,7 @@ final class FilterDataProvider: NEFilterDataProvider {
     private let logger = Logger(subsystem: "com.daniele21.trafficmonitoring", category: "advanced-data-provider")
 
     override func startFilter(completionHandler: @escaping (Error?) -> Void) {
+        ProviderEvidenceStore.shared.markProviderStarted()
         logger.notice("Experimental Advanced Observability data provider started")
         completionHandler(nil)
     }
