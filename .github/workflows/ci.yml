@@ -63,15 +63,31 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee app-build.log
 
+      - name: Verify Advanced Observability bundle structure
+        run: |
+          set -euo pipefail
+          APP_PATH=".build/package/Build/Products/Release/TrafficMonitoring.app"
+          EXT_PATH="$APP_PATH/Contents/Library/SystemExtensions/com.daniele21.trafficmonitoring.filter.systemextension"
+
+          test -d "$APP_PATH"
+          test -d "$EXT_PATH"
+
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$EXT_PATH/Contents/Info.plist")" = "com.daniele21.trafficmonitoring.filter"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NEMachServiceName' "$EXT_PATH/Contents/Info.plist")" = "group.com.daniele21.trafficmonitoring.advanced-observability"
+          /usr/libexec/PlistBuddy -c 'Print :NSSystemExtensionUsageDescription' "$APP_PATH/Contents/Info.plist" >/dev/null
+
       - name: Package runnable macOS app
         run: |
           set -euo pipefail
           APP_PATH=".build/package/Build/Products/Release/TrafficMonitoring.app"
           ARCHIVE_PATH="TrafficMonitoring.app.zip"
 
-          test -d "$APP_PATH"
+          # CI has no production Developer ID / Network Extension provisioning.
+          # Ad-hoc signing keeps the core development app runnable but does not
+          # pretend Advanced Observability can be activated with this artifact.
           codesign --force --deep --sign - "$APP_PATH"
           codesign --verify --deep --strict "$APP_PATH"
+
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
           shasum -a 256 "$ARCHIVE_PATH" > TrafficMonitoring.app.zip.sha256
 
