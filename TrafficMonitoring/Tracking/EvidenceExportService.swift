@@ -68,6 +68,7 @@ public struct EvidenceExportService: Sendable {
             "uploaded_bytes",
             "total_bytes",
             "is_expensive",
+            "is_constrained",
             "first_observed_at",
             "last_observed_at"
         ].joined(separator: ","))
@@ -93,6 +94,7 @@ public struct EvidenceExportService: Sendable {
                 String(network.uploadedBytes),
                 String(network.totalBytes),
                 network.isExpensive ? "true" : "false",
+                network.isConstrained ? "true" : "false",
                 formatter.string(from: network.firstObservedAt),
                 formatter.string(from: network.lastObservedAt)
             ].joined(separator: ","))
@@ -107,7 +109,7 @@ public struct EvidenceExportService: Sendable {
                 document.coverage.quality.rawValue,
                 seconds(document.coverage.observedSeconds),
                 seconds(document.coverage.selectedSeconds),
-                "", "", "", "", "0", "0", "0", "false", "", ""
+                "", "", "", "", "0", "0", "0", "false", "false", "", ""
             ].joined(separator: ","))
         }
 
