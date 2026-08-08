@@ -14,6 +14,12 @@ targets:
     platform: macOS
     sources:
       - path: TrafficMonitoring
+    dependencies:
+      - target: TrafficMonitoringFilterDataProvider
+        embed: true
+        link: false
+      - sdk: NetworkExtension.framework
+      - sdk: SystemExtensions.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring
@@ -23,8 +29,29 @@ targets:
         INFOPLIST_KEY_NSLocationUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
         ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_ENTITLEMENTS: TrafficMonitoring/TrafficMonitoring.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        MARKETING_VERSION: 0.2.0
+        CURRENT_PROJECT_VERSION: 1
+
+  TrafficMonitoringFilterDataProvider:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: experiments/advanced-observability/Sources
+    dependencies:
+      - sdk: NetworkExtension.framework
+      - sdk: Network.framework
+      - sdk: Security.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.filter
+        PRODUCT_NAME: TrafficMonitoringFilterDataProvider
+        INFOPLIST_FILE: experiments/advanced-observability/Info.plist
+        CODE_SIGN_ENTITLEMENTS: experiments/advanced-observability/TrafficMonitoringFilterExtension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
         MARKETING_VERSION: 0.2.0
         CURRENT_PROJECT_VERSION: 1
 
@@ -47,6 +74,7 @@ schemes:
     build:
       targets:
         TrafficMonitoring: all
+        TrafficMonitoringFilterDataProvider: all
         TrafficMonitoringTests: [test]
     test:
       targets:
