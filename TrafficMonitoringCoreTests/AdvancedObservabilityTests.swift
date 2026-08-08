@@ -41,9 +41,49 @@ final class AdvancedObservabilityTests: XCTestCase {
 
     func testAdvancedSnapshotRoundTripsThroughBridgeJSONContract() throws {
         let now = Date(timeIntervalSince1970: 1_786_180_800)
-        let snapshot = AdvancedObservabilitySnapshot(providerState: .active, byteAccounting: .notValidated, applications: [ApplicationEvidenceSummary(applicationIdentifier: "com.example.app", localNetworkFlows: 2, externalFlows: 1, localNetworkBytes: 100, externalBytes: 50, accountedBytes: 150, hasCompleteByteAccounting: false, lastObservedAt: now)], lastObservedAt: now, generatedAt: now)
+        let snapshot = AdvancedObservabilitySnapshot(
+            providerState: .active,
+            byteAccounting: .notValidated,
+            applications: [
+                ApplicationEvidenceSummary(
+                    applicationIdentifier: "com.example.app",
+                    localNetworkFlows: 2,
+                    externalFlows: 1,
+                    localNetworkBytes: 100,
+                    externalBytes: 50,
+                    accountedBytes: 150,
+                    hasCompleteByteAccounting: false,
+                    lastObservedAt: now
+                )
+            ],
+            lastObservedAt: now,
+            generatedAt: now,
+            protocolVersion: 1,
+            providerStartedAt: now.addingTimeInterval(-60),
+            activeFlowCount: 2,
+            observedFlowCount: 7
+        )
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         XCTAssertEqual(try decoder.decode(AdvancedObservabilitySnapshot.self, from: encoder.encode(snapshot)), snapshot)
+    }
+
+    func testAdvancedSnapshotDecodesLegacyPayloadWithoutRuntimeDiagnostics() throws {
+        let json = """
+        {
+          "providerState": "active",
+          "byteAccounting": "notValidated",
+          "applications": [],
+          "lastObservedAt": null,
+          "generatedAt": "2026-08-08T18:00:00Z"
+        }
+        """
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(AdvancedObservabilitySnapshot.self, from: Data(json.utf8))
+        XCTAssertEqual(snapshot.providerState, .active)
+        XCTAssertNil(snapshot.protocolVersion)
+        XCTAssertNil(snapshot.providerStartedAt)
+        XCTAssertNil(snapshot.activeFlowCount)
+        XCTAssertNil(snapshot.observedFlowCount)
     }
 }
