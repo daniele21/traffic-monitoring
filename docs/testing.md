@@ -5,241 +5,217 @@ This document defines how correctness is proven without requiring every test to 
 ## Testing pyramid
 
 ```text
-Manual hardware/network validation
-            ▲
-       Integration tests
-            ▲
-   Deterministic unit tests
+Signed real-Mac / hardware validation
+               ▲
+        Integration tests
+               ▲
+    Deterministic unit tests
 ```
 
-Most tracking semantics must be covered by deterministic unit tests. Real-network tests validate platform adapters and assumptions that mocks cannot prove.
+Most tracking semantics must be deterministic. Real-network tests validate platform adapters, Apple entitlements, system-extension behavior, and assumptions that CI cannot prove.
 
-## 1. Domain and tracker unit tests
+## 1. Core domain / tracker tests
 
-Use fake implementations of:
-
-- `InterfaceCounterReader`;
-- `NetworkContextProviding`;
-- clock/time source;
-- `UsageRepository`.
-
-Feed explicit sequences of events/readings and assert emitted deltas, state, and persistence calls.
-
-### Required counter tests
+Use fake counter/context/time/repository inputs and cover:
 
 - first reading produces no usage;
-- monotonic RX/TX produces exact delta;
-- upload-only and download-only traffic;
-- zero delta;
-- timer jitter uses actual elapsed time for rate;
-- counter regression discards interval and resets baseline;
-- implausible delta guard rejects corrupted reading;
-- very large legitimate `UInt64` values do not overflow calculations.
+- monotonic RX/TX exact delta;
+- upload-only/download-only/zero delta;
+- timer jitter uses real elapsed time for rate;
+- counter regression resets baseline without synthetic usage;
+- implausible-delta guard;
+- large `UInt64` values;
+- same interface/network continuation;
+- Wi-Fi A → B context boundary;
+- disconnect/reconnect;
+- SSID unavailable/permission denied without stale identity reuse;
+- expensive/constrained metadata;
+- simultaneous physical interfaces;
+- virtual/tunnel exclusion;
+- sleep/wake, graceful stop, relaunch boundaries.
 
-### Required attribution tests
+## 2. Persistence / analytics tests
 
-- same interface + same network continues session;
-- same `en0` switches SSID A → SSID B;
-- network disconnect/reconnect creates boundary;
-- SSID becomes unavailable;
-- permission unavailable never reuses stale SSID;
-- `isExpensive` metadata is persisted for the relevant interval;
-- simultaneous physical interfaces remain independent;
-- virtual `utun*` interface is excluded from accounting.
+Use isolated/in-memory SwiftData where possible.
 
-### Required lifecycle tests
+Cover:
 
-- sleep flushes and suspends;
-- wake creates new baselines and no immediate delta;
-- graceful stop flushes;
-- crash recovery closes stale session at last checkpoint;
-- relaunch never computes a cross-process counter delta.
+- network-profile upsert;
+- alias rename preserving immutable identity;
+- five-minute usage bucket checkpoint/reconciliation;
+- five-minute evidence-coverage bucket checkpoint/reconciliation;
+- long observation gaps stay unobserved;
+- empty data;
+- numeric limits;
+- totals reconcile between summary, network rows, time-series points, and export;
+- JSON round-trip/schema version;
+- CSV escaping.
 
-## 2. Persistence tests
+## 3. Core real-Mac validation
 
-Use an isolated/in-memory SwiftData store where possible.
+Use `m1-validation.md` for the focused checklist.
 
-Test:
+At minimum exercise:
 
-- network-profile upsert by identity key;
-- alias rename does not change identity;
-- current bucket checkpoint updates rather than duplicates;
-- context transition closes previous bucket;
-- five-minute boundary creates next bucket;
-- session totals reconcile with bucket totals;
-- stale session recovery;
-- delete/reset history;
-- query behavior with empty data;
-- values near persistence numeric limits.
+- normal Wi-Fi;
+- SSID permission granted/denied;
+- Wi-Fi change;
+- likely hotspot/expensive path;
+- Ethernet where available;
+- VPN;
+- sleep/wake;
+- quit/relaunch;
+- force-kill/relaunch;
+- controlled download/upload comparison against macOS physical-interface counters.
 
-Once a public schema ships, keep a persistent fixture from each schema version and add migration tests.
+## 4. Advanced Observability automated gates
 
-## 3. Analytics fixture tests
+The normal CI intentionally proves **source/build/package compatibility**, not privileged runtime activation.
 
-Seed deterministic buckets/sessions across:
+CI must pass:
 
-- multiple days;
-- multiple networks;
-- download/upload mixes;
-- expensive and non-expensive connections;
-- concurrent interfaces;
-- month boundary;
-- DST transition where practical.
+1. `swift test`;
+2. app Debug build + Xcode tests;
+3. standalone Advanced Observability system-extension build;
+4. clean Release build;
+5. embedded system-extension structure verification;
+6. ad-hoc signing/verification for core testing;
+7. artifact upload.
 
-Assert:
+The Release bundle must contain:
 
 ```text
-summary.total = summary.download + summary.upload
-summary = sum(network rows)
-summary = sum(time-series points)
+TrafficMonitoring.app/Contents/Library/SystemExtensions/
+  com.daniele21.trafficmonitoring.filter.systemextension
 ```
 
-Test period clipping and custom-range boundary behavior explicitly.
+CI also asserts:
 
-## 4. Platform adapter tests
+- embedded `CFBundleIdentifier`;
+- `NEMachServiceName`;
+- host `NSSystemExtensionUsageDescription`.
 
-Platform APIs are not fully mockable, so keep adapters small and add targeted tests where useful.
+Automated Advanced Observability semantics cover:
 
-### Interface reader
+- loopback/private/public/unknown locality rules;
+- hostname-only evidence remains `unknown` without DNS lookup;
+- `Unknown application` remains valid;
+- per-app/per-locality aggregation;
+- missing byte accounting remains incomplete;
+- aggregate snapshot JSON round-trip;
+- installer/XPC/provider source compiles against the supported macOS SDK.
 
-Verify:
+## 5. B1/B2 signed real-Mac matrix
 
-- returns known active interface names;
-- byte values are non-negative/monotonic during a stable connection;
-- repeated reads do not leak memory;
-- unknown interface families do not crash;
-- excluded interfaces are classified as expected.
+Do **not** mark Advanced Observability production-accepted until a properly entitled/signed build passes the following.
 
-### CoreWLAN
+### Activation / lifecycle
 
-Verify signed app behavior for:
+- install app in intended location;
+- request system-extension activation;
+- exercise macOS approval;
+- enable `NEFilterManager` configuration;
+- verify provider launch;
+- verify XPC snapshot retrieval;
+- disable filter;
+- app/provider restart;
+- provider update/deactivation;
+- restart-required path where applicable.
 
-- Location not determined;
-- authorized;
-- denied;
-- current SSID;
-- Wi-Fi disconnected;
-- SSID switch.
+### Source application
 
-Do not make CI depend on a specific SSID.
+Generate controlled traffic from:
 
-### NWPathMonitor
-
-Verify context adapter produces events for practical path changes and captures expensive/constrained metadata.
-
-## 5. Manual accuracy scenarios
-
-Record results in a lightweight checklist before release.
-
-### Controlled download
-
-1. note baseline physical-interface bytes;
-2. transfer a known-size file over the Internet;
-3. compare app delta with interface-counter reference;
-4. account for protocol overhead — exact file-size equality is not expected.
-
-Expected: app/interface-counter values are close because both measure network bytes, and attribution goes to the expected network.
-
-### Controlled upload
-
-Same process focused on TX.
-
-### Wi-Fi switch
-
-1. generate traffic on Wi-Fi A;
-2. switch to Wi-Fi B;
-3. generate more traffic;
-4. inspect dashboard.
-
-Expected: separate profiles/session boundaries and no giant transition delta.
-
-### Phone hotspot
+- Safari / WebKit;
+- CLI (`curl` or equivalent);
+- native URLSession test app;
+- XPC/helper process;
+- short-lived process;
+- development-signed/unsigned test app;
+- observable system process.
 
 Expected:
 
-- usage is counted normally;
-- SSID identifies the phone hotspot if authorized/available;
-- expensive flag is shown if macOS reports it;
-- switching back to Wi-Fi closes hotspot attribution.
+- correct signing identifier where reliably resolvable;
+- otherwise explicit `Unknown application`;
+- no silent helper-to-parent merging.
 
-### VPN
+### Locality
 
-1. record usage without VPN;
-2. enable VPN;
-3. perform controlled transfer;
-4. inspect physical and `utun*` counters in diagnostics.
+Test controlled destinations for:
 
-Expected: persisted product total counts the underlying physical interface once.
+- loopback IPv4/IPv6;
+- private LAN IPv4;
+- local IPv6/link-local where available;
+- public IPv4;
+- public IPv6 where available;
+- hostname-only/missing endpoint representation.
 
-### Sleep/wake
+Unknown cases stay unknown.
 
-Expected: no synthetic spike immediately after wake.
+### Byte reconciliation
 
-### Force kill
+For repeated controlled transfers record:
 
-Expected: at most the bounded uncheckpointed interval is lost; no synthetic bytes appear after restart.
+- expected transfer size;
+- provider inbound/outbound reports;
+- derived per-flow delta;
+- app/locality aggregate;
+- core physical-interface delta in the same window.
 
-## 6. Long-run reliability test
+Do not promote `ByteAccountingCapability` to `validated` until repeated tests show an acceptable documented relationship and no report-update double counting.
 
-Before v1 release, perform a multi-day run that includes:
+### VPN / coverage / helpers
 
-- multiple sleeps/wakes;
-- at least two Wi-Fi networks;
-- hotspot use;
-- VPN toggle;
-- app restart;
-- network disconnect;
-- dashboard queries.
+Exercise:
 
-Inspect:
+- VPN off/on;
+- provider restart during traffic;
+- app restart while provider remains active;
+- sleep/wake;
+- WebKit/helper processes;
+- long-lived and short-lived flows.
 
-- monotonic historical totals;
-- no absurd single bucket;
-- no permanently open stale sessions;
-- DB size;
-- CPU/wakeups;
-- memory growth;
-- persistence error logs.
+Define provider coverage semantics before any audit verdict work.
 
-## 7. Performance tests
+### Performance
 
-### Tracker
+Measure:
 
-Use synthetic event streams to ensure processing thousands/millions of samples does not accumulate raw history in memory.
+- idle CPU;
+- memory;
+- wakeups;
+- normal browsing workload;
+- sustained large transfer;
+- XPC polling overhead;
+- provider flow-state growth.
 
-### Database
+An always-on observability feature that materially affects networking, thermals, or battery is not acceptable.
 
-Seed approximately one year of five-minute buckets across several networks and measure:
+### Security
 
-- current month summary;
-- 30-day time series;
-- usage by network;
-- one-network detail.
+Before production:
 
-Queries should remain interactive on target hardware.
+- authenticate XPC callers by code-signing identity;
+- ensure arbitrary local processes cannot retrieve provider evidence;
+- keep raw audit tokens out of IPC;
+- keep endpoint/activity metadata out of Release logs;
+- test app/provider version mismatch.
 
-### Energy
+### Content-filter coexistence
 
-Use Instruments before release to inspect:
+macOS content filters are exclusive. Test with another network content filter/security product installed.
 
-- CPU when idle;
-- timer wakeups;
-- database write frequency;
-- memory stability.
+The user must see the warning before enablement. Decide explicitly whether this platform constraint is acceptable before production release.
 
-If sampling every 2 seconds causes measurable energy cost, tune cadence based on data rather than intuition.
+## 6. Long-run core reliability
 
-## 8. CI expectations
+Before release, perform a multi-day core run including multiple sleep/wake cycles, at least two Wi-Fi networks, hotspot use, VPN toggle, app restart, disconnects, and Analytics queries.
 
-Once project files exist, CI should run at least:
+Inspect monotonic totals, absurd buckets, DB size, CPU/wakeups, memory growth, evidence coverage, and persistence errors.
 
-- build for supported macOS target;
-- unit tests;
-- persistence/analytics integration tests;
-- formatting/linting only if the project adopts a formatter/linter explicitly.
+## Evidence rule
 
-Do not create CI tests that require Location permission, a specific network, an iPhone hotspot, or Internet access.
+A test proves only what it observes.
 
-## Bug regression rule
-
-Every tracking/accounting bug should gain a deterministic regression fixture whenever the failure can be represented as a sequence of counters/context events. This keeps real-world edge cases from returning later.
+Compile success proves API/build compatibility. A signed controlled runtime test proves behavior for that test matrix. Neither alone proves that another application is universally private or always local-only.
