@@ -37,7 +37,11 @@ final class AdvancedObservabilityInstaller: NSObject, ObservableObject, OSSystem
     @Published private(set) var message = "Advanced Observability has not been enabled."
     @Published private(set) var lastError: String?
 
+    private enum RequestKind { case activation, deactivation }
+
     private let requestQueue = DispatchQueue(label: "com.daniele21.trafficmonitoring.system-extension-request")
+    private let requestLock = NSLock()
+    private var requestKinds: [ObjectIdentifier: RequestKind] = [:]
 
     func activateAndEnable() {
         setState(.requestingActivation, message: "Requesting activation of the optional Traffic Monitoring system extension.")
@@ -46,6 +50,7 @@ final class AdvancedObservabilityInstaller: NSObject, ObservableObject, OSSystem
             forExtensionWithIdentifier: Self.extensionIdentifier,
             queue: requestQueue
         )
+        register(request, as: .activation)
         request.delegate = self
         OSSystemExtensionManager.shared.submitRequest(request)
     }
@@ -65,7 +70,7 @@ final class AdvancedObservabilityInstaller: NSObject, ObservableObject, OSSystem
                 if let error {
                     self?.fail("Could not disable the network filter: \(error.localizedDescription)")
                 } else {
-                    self?.setState(.disabled, message: "Advanced Observability is disabled. The system extension may remain installed for future use.")
+                    self?.setState(.disabled, message: "Advanced Observability is disabled. Core traffic tracking continues normally.")
                 }
             }
         }
@@ -77,6 +82,7 @@ final class AdvancedObservabilityInstaller: NSObject, ObservableObject, OSSystem
             forExtensionWithIdentifier: Self.extensionIdentifier,
             queue: requestQueue
         )
+        register(request, as: .deactivation)
         request.delegate = self
         OSSystemExtensionManager.shared.submitRequest(request)
     }
@@ -84,19 +90,25 @@ final class AdvancedObservabilityInstaller: NSObject, ObservableObject, OSSystem
     // MARK: - OSSystemExtensionRequestDelegate
 
     func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
+        let kind = takeKind(for: request) ?? .activation
+
         switch result {
         case .completed:
-            if request.identifier == Self.extensionIdentifier {
+            switch kind {
+            case .activation:
                 configureFilter()
+            case .deactivation:
+                setState(.disabled, message: "The Advanced Observability system extension was deactivated. Core traffic tracking remains available.")
             }
         case .willCompleteAfterReboot:
-            setState(.restartRequired, message: "macOS accepted the system extension update. Restart your Mac before Advanced Observability can become active.")
+            setState(.restartRequired, message: "macOS accepted the system-extension change. Restart your Mac to complete it.")
         @unknown default:
-            setState(.failed, message: "macOS returned an unknown system-extension activation result.", error: "Unknown activation result")
+            setState(.failed, message: "macOS returned an unknown system-extension result.", error: "Unknown system-extension result")
         }
     }
 
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
+        _ = takeKind(for: request)
         fail("System extension request failed: \(error.localizedDescription)")
     }
 
@@ -142,6 +154,18 @@ final class AdvancedObservabilityInstaller: NSObject, ObservableObject, OSSystem
                 }
             }
         }
+    }
+
+    private func register(_ request: OSSystemExtensionRequest, as kind: RequestKind) {
+        requestLock.lock()
+        requestKinds[ObjectIdentifier(request)] = kind
+        requestLock.unlock()
+    }
+
+    private func takeKind(for request: OSSystemExtensionRequest) -> RequestKind? {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        return requestKinds.removeValue(forKey: ObjectIdentifier(request))
     }
 
     private func fail(_ message: String) {
