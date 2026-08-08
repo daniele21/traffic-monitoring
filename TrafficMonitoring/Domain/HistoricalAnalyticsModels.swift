@@ -74,6 +74,7 @@ public struct NetworkUsageHistoryRow: Identifiable, Sendable, Equatable {
     public var firstSeenAt: Date
     public var lastSeenAt: Date
     public var isExpensive: Bool
+    public var isConstrained: Bool
 
     public var id: String { identityKey }
 
@@ -89,7 +90,8 @@ public struct NetworkUsageHistoryRow: Identifiable, Sendable, Equatable {
         uploadedBytes: UInt64,
         firstSeenAt: Date,
         lastSeenAt: Date,
-        isExpensive: Bool
+        isExpensive: Bool,
+        isConstrained: Bool = false
     ) {
         self.identityKey = identityKey
         self.networkName = networkName
@@ -99,6 +101,7 @@ public struct NetworkUsageHistoryRow: Identifiable, Sendable, Equatable {
         self.firstSeenAt = firstSeenAt
         self.lastSeenAt = lastSeenAt
         self.isExpensive = isExpensive
+        self.isConstrained = isConstrained
     }
 }
 
