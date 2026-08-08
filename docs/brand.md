@@ -1,27 +1,26 @@
 # Brand system
 
-This document is authoritative for Traffic Monitoring visual identity and product-language styling.
-
-Read it only for UI, visual, README or brand-asset work.
+Authoritative visual identity for Traffic Monitoring. Read only for UI, README, logo, app icon, chart, or product-language work.
 
 ## Identity
 
-Primary symbol: shield + Wi-Fi signal + upward usage trend.
+Primary symbol: **shield + Wi-Fi signal + upward usage trend**.
 
 Use:
 
-- shield symbol for the macOS app icon and compact identity surfaces;
-- full Traffic Monitoring lockup where the product name must be explicit;
-- simplified monochrome shield/signal treatment in the macOS menu bar.
+- shield symbol for macOS app icon and compact identity surfaces;
+- shield + product name in primary app identity/header surfaces;
+- simplified monochrome shield treatment in the macOS menu bar;
+- full approved lockup in external marketing surfaces when available.
 
-The logo may feel premium and dimensional. Product UI should remain flat, restrained and highly legible.
+The logo may feel premium and dimensional. Product UI stays flat, restrained, native, and highly legible.
 
 ## Personality
 
-- Reliable — accurate, calm, dependable.
-- In control — visibility without alarmism.
-- Technical — credible, never cryptic.
-- Direct — plain labels and obvious actions.
+- **Reliable** — accurate, calm, dependable.
+- **In control** — visibility without alarmism.
+- **Technical** — credible, never cryptic.
+- **Direct** — plain labels and obvious actions.
 
 ## Brand colors
 
@@ -40,18 +39,18 @@ Critical       #EF4444
 
 Usage:
 
-- Royal Blue — selection, primary actions, primary network series.
-- Network Blue — standard network/data emphasis.
-- Signal Cyan — live activity, hotspot emphasis and meaningful peaks.
-- Midnight / Deep Navy — high-trust identity framing and headings.
-- Green / amber / red — status only, not decorative branding.
+- Royal Blue — primary selection/action/series emphasis.
+- Network Blue — standard network/data emphasis and app tint.
+- Signal Cyan — live state, hotspot emphasis and meaningful peaks.
+- Midnight / Deep Navy — identity framing/headings.
+- Green / amber / red — semantic state only.
 
 ## Typography
 
 - macOS UI: SF Pro Text / SF Pro Display.
 - Fallback: Inter.
-- Technical aligned metrics: SF Mono when useful.
-- Regular for body, Semibold for labels, Bold for key metrics only.
+- Technical aligned metrics: SF Mono where useful.
+- Regular for body, Semibold for labels, Bold only for key metrics.
 
 ## Product language
 
@@ -63,34 +62,52 @@ Prefer:
 - `Current network`
 - `Usage by network`
 - `Peak usage`
+- `Applications`
+- `Local`
+- `External`
+- `Unknown`
+- `Not validated`
 
-Keep technical terms such as raw counters, deltas and interface names inside Monitor/diagnostics rather than primary analytics.
+Keep raw counters, deltas, interface names, audit tokens, and provider internals inside Monitor/developer diagnostics.
 
 ## Data visualization
 
-Charts are precise and calm rather than decorative.
+- stable colors for network series;
+- Signal Cyan only for live/peak/high-attention evidence;
+- avoid heavy fills and decorative gradients;
+- always show unit and timeframe;
+- use direct labels when readable;
+- do not use color alone to communicate evidence quality.
 
-- use stable network-series colors;
-- reserve Signal Cyan for live state or meaningful peaks;
-- avoid heavy area fills and decorative gradients;
-- always show units and timeframe;
-- prefer direct labels when readable;
-- keep network identity/color stable within a view.
+## Advanced Observability styling
+
+Advanced mode should look like part of the same product, not a separate security tool.
+
+- Blue = normal selected/active UI.
+- Cyan = live flow activity where useful.
+- Green = validated/healthy only.
+- Amber = approval required, experimental, or meaningful caution.
+- Red = actual failure/degraded state, not merely unavailable entitlement in an ad-hoc development build.
+- `Unknown` and `Not validated` must be visually explicit but calm.
 
 ## App surfaces
 
-- support light and dark mode;
+- support light/dark mode;
 - use native macOS spacing and rounded cards;
 - avoid excessive chrome;
-- use the shield primarily for identity surfaces rather than repeating it inside every metric card;
-- advanced/experimental states should use clear status copy, not dramatic warnings.
+- use the shield mainly in identity surfaces, not every metric card;
+- menu bar remains compact and monochrome at system level;
+- system-extension approval/conflict copy must be factual and actionable.
 
 ## Repository assets
 
-Canonical app assets live in:
+Canonical compiled assets:
 
 ```text
 TrafficMonitoring/Resources/BrandAssets.xcassets/
+├── AccentColor.colorset/
+├── AppIcon.appiconset/
+└── BrandShield.imageset/
 ```
 
-They are derived from the approved shield symbol and wordmark supplied with the brand kit.
+The app icon and in-product shield follow the approved shield direction. The README renders the same repository shield asset so product and repository identity stay aligned.
