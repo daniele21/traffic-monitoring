@@ -65,7 +65,7 @@ Authority for Phase 4 semantics: `non-privileged-app-activity.md`.
 
 ## Brand packaging polish
 
-- AppIcon slots use correctly dimensioned shield SVG assets for macOS sizes/scales.
+- AppIcon slots use correctly dimensioned shield PNG assets for macOS sizes/scales.
 - Menu-bar glyph remains monochrome/native while the full shield is used inside branded identity surfaces.
 
 ## Claim boundary

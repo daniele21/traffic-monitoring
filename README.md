@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="TrafficMonitoring/Resources/BrandAssets.xcassets/BrandShield.imageset/shield.svg" width="132" alt="Traffic Monitoring shield logo">
+  <img src="TrafficMonitoring/Resources/BrandAssets.xcassets/BrandShield.imageset/shield.png" width="132" alt="Traffic Monitoring shield logo">
 </p>
 
 <h1 align="center">Traffic Monitoring</h1>
@@ -216,35 +216,86 @@ See:
 
 ## How it works
 
-![Traffic Monitoring architecture](traffic-monitoring-arch.png)
+<p align="center">
+  <img src="traffic-monitoring-arch.png" alt="Traffic Monitoring Architecture Diagram" width="100%">
+</p>
 
-The current implementation keeps the lightweight tracker, application preview, and privileged prototype behind separate boundaries:
+The architecture of **Traffic Monitoring** is organized into three distinct data paths that isolate low-level system sources, tracking business logic, local persistence, and user-facing product surfaces.
 
-- **Network context:** `NWPathMonitor` provides path status plus expensive/constrained metadata; CoreWLAN enriches Wi-Fi context with SSID when permission allows it.
-- **Physical counters:** the production reader uses Darwin routing `sysctl` data and 64-bit `if_data64` byte counters rather than short-lived session estimates.
-- **Attribution:** deltas are assigned to the network identity active for that interface; context changes reset baselines instead of moving old bytes into a new network.
-- **Persistence:** deltas accumulate in memory, are compacted into five-minute usage/coverage buckets, and checkpoint to SwiftData roughly every fifteen seconds.
-- **Analytics:** Overview, Trends, Networks, peaks, aliases, coverage, and custom timeframes are derived from aggregate history plus pending in-memory usage.
-- **Application preview:** `nettop` process summaries are parsed locally, resolved toward application identity where possible, aggregated for product UI, and kept out of authoritative network evidence/export.
-- **Advanced provider:** the optional Network Extension prototype classifies observed flows and exposes aggregate evidence over authenticated XPC without sending packet payloads to the main app.
+### Architectural Breakdown
 
-The dependency direction is deliberate:
+#### 1. macOS Data Sources (`macOS Sources`)
+Low-level macOS APIs and toolings feeding context and measurements into the system:
+
+- **`Network.framework`** ([`AppleNetworkContextProvider.swift`](TrafficMonitoring/Platform/AppleNetworkContextProvider.swift)): Monitors interface state transitions and network traits via `NWPathMonitor` (e.g., detecting cellular hotspots or constrained connections).
+- **`CoreWLAN + Location`** ([`WiFiContextProvider.swift`](TrafficMonitoring/Platform/WiFiContextProvider.swift), [`LocationAuthorizationController.swift`](TrafficMonitoring/Platform/LocationAuthorizationController.swift)): Retrieves Wi-Fi SSID and interface details when Location permission is granted. Gracefully degrades to anonymous Wi-Fi identity when permission is restricted.
+- **`Darwin sysctl`** ([`DarwinInterfaceCounterReader.swift`](TrafficMonitoring/Platform/DarwinInterfaceCounterReader.swift)): Direct 64-bit kernel interface statistics (`if_data64`, RX/TX byte totals) fetched via BSD `sysctl` (`NET_RT_IFLIST2`) for accurate, hardware-level physical traffic counting.
+- **`nettop`** ([`NettopProcessSampler.swift`](TrafficMonitoring/Tracking/NettopProcessSampler.swift)): Subprocess sampler running `nettop` in non-blocking CSV mode every ~15 seconds to sample system-wide process byte statistics for best-effort previewing.
+
+---
+
+#### 2. Core Network Evidence (`CURRENT` — Authoritative Path)
+The primary production tracking engine (represented by the **solid green/blue path**):
+
+- **Platform Adapters → Traffic Tracker**: [`TrafficTracker.swift`](TrafficMonitoring/Tracking/TrafficTracker.swift) (a thread-safe Swift actor) consumes platform adapter events and calculates delta bytes per physical interface using [`DeltaCalculator.swift`](TrafficMonitoring/Tracking/DeltaCalculator.swift). Interface resets or counter wrap-arounds are safely rejected.
+- **Live State → In-Memory Accumulation**: Real-time traffic rates are tracked in [`SessionUsageAccumulator.swift`](TrafficMonitoring/Tracking/SessionUsageAccumulator.swift) and accumulated into memory via [`UsageBucketAccumulator.swift`](TrafficMonitoring/Tracking/UsageBucketAccumulator.swift).
+- **5-Minute Buckets → SwiftData Local Store**: Deltas are compacted into 5-minute time windows (`UsageBucketEntity`) and checkpointed to local storage via [`SwiftDataUsageRepository.swift`](TrafficMonitoring/Persistence/SwiftDataUsageRepository.swift) approximately every 15 seconds.
+- **Evidence Quality & Analytics Engine**: Tracks continuous observation coverage ([`ObservationCoverage.swift`](TrafficMonitoring/Domain/ObservationCoverage.swift)), identifying gaps from system sleep or reboots. Aggregated metrics feed into [`UsageAnalyticsAggregator.swift`](TrafficMonitoring/Tracking/UsageAnalyticsAggregator.swift) and [`EvidenceExportService.swift`](TrafficMonitoring/Tracking/EvidenceExportService.swift) for reproducible JSON/CSV evidence export.
+
+---
+
+#### 3. App Activity Preview (`BEST-EFFORT` — Non-Privileged Path)
+Lightweight process attribution (represented by the **dashed cyan path**), operating completely without privileged developer entitlements:
+
+- **Process Sampler (`nettop` every ~15s)**: [`NettopProcessSampler.swift`](TrafficMonitoring/Tracking/NettopProcessSampler.swift) captures snapshots of active network processes.
+- **Parser + Resolver**: [`NettopProcessCSVParser.swift`](TrafficMonitoring/Tracking/NettopProcessCSVParser.swift) parses raw CSV samples, while [`AppMetadataResolver.swift`](TrafficMonitoring/Tracking/AppMetadataResolver.swift) maps process PIDs to macOS application bundles and resolves helper processes back to parent applications.
+- **Three Aggregation Levels**: [`LightweightApplicationActivityAggregator.swift`](TrafficMonitoring/Tracking/LightweightApplicationActivityAggregator.swift) summarizes activity at three distinct granularities:
+  1. **Applications**: Grouped by macOS application bundle identifier.
+  2. **Process Names**: Grouped by executable binary name.
+  3. **Processes / PID**: Granular per-process breakdown.
+- **Boundary**: Purely best-effort activity visibility; kept separate from authoritative network evidence exports.
+
+---
+
+#### 4. Advanced Provider (`EXPERIMENTAL` — Signed System Extension Path)
+Separately gated prototype for flow-level network evidence (represented by the **dashed amber path**):
+
+- **`NEFilterDataProvider` System Extension**: Prototype located in [`experiments/advanced-observability/`](experiments/advanced-observability/). Uses macOS Content Filter APIs and Security Code Signing APIs (`sourceAppAuditToken`) for precise application identification.
+- **Flow Evidence & Locality**: Evaluates flow locality (`Local`, `External`, `Unknown`) via [`IPLocalityClassifier.swift`](TrafficMonitoring/Tracking/IPLocalityClassifier.swift) without triggering DNS traffic.
+- **Authenticated XPC**: Exposes aggregate flow evidence (JSON format only) to the main app via a secure Mach/XPC bridge declared by `NEMachServiceName`. Never sends packet payloads or raw audit tokens.
+
+---
+
+#### 5. Product Surfaces (`Product Surfaces`)
+SwiftUI presentation layer located in [`TrafficMonitoring/Features/`](TrafficMonitoring/Features/):
+
+- **Overview / Trends / Networks**: Driven by the authoritative Core Network Evidence path. Displays total bandwidth, peak usage, network comparison, and observation coverage.
+- **Applications Beta** ([`ApplicationsView.swift`](TrafficMonitoring/Features/Applications/ApplicationsView.swift)): Displays per-application network attribution, combining data from both the Best-Effort App Preview (cyan path) and the Experimental Advanced Provider (amber path).
+- **Monitor**: Live interface counter feed and real-time activity diagnostics.
+- **Menu Bar / Settings**: Quick status via `MenuBarExtra`, user preferences, Wi-Fi permission toggles, and system extension lifecycle controls.
+
+---
+
+### Dependency & Privacy Architecture
+
+The architectural dependency flow enforces strict separation:
 
 ```text
-Platform sources
+Platform Sources
     ↓
-Tracking / evidence domain
+Tracking / Evidence Domain
     ↓
-Local aggregate persistence
+Local Aggregate Persistence
     ↓
-Analytics / application activity controllers
+Analytics / Application Activity Controllers
     ↓
-SwiftUI product surfaces
+SwiftUI Product Surfaces
 ```
 
-Core tracking remains functional when Wi-Fi naming permission is denied, App Activity Preview is disabled, or the Advanced Provider is absent.
+- **Local-First Privacy Invariant**: All analytics and evidence remain **100% on-device**. No network telemetry or personal usage data is transmitted externally.
+- **Independent Execution**: The core tracking engine functions continuously regardless of whether Wi-Fi SSID permissions are denied, App Activity Preview is disabled, or the Advanced Provider is absent.
 
-For the durable boundaries and trade-offs, read [`docs/architecture.md`](docs/architecture.md), [`docs/data-and-analytics.md`](docs/data-and-analytics.md), and the accepted Advanced Observability ADR in [`docs/adr/0001-advanced-observability-content-filter.md`](docs/adr/0001-advanced-observability-content-filter.md).
+For deeper technical details, refer to [`docs/architecture.md`](docs/architecture.md), [`docs/data-and-analytics.md`](docs/data-and-analytics.md), and [`docs/adr/0001-advanced-observability-content-filter.md`](docs/adr/0001-advanced-observability-content-filter.md).
 
 ## Repository map
 
