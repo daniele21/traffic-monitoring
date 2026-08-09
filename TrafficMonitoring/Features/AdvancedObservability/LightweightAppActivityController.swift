@@ -19,6 +19,7 @@ final class LightweightAppActivityController: ObservableObject {
 
     private let sampler = NettopProcessSampler()
     private let applicationAggregator = LightweightApplicationActivityAggregator()
+    private let processNameAggregator = LightweightProcessNameActivityAggregator()
     private var samplingTask: Task<Void, Never>?
 
     init() {
@@ -32,6 +33,10 @@ final class LightweightAppActivityController: ObservableObject {
 
     var applications: [LightweightApplicationNetworkSummary] {
         applicationAggregator.aggregate(samples)
+    }
+
+    var processNames: [LightweightProcessNameNetworkSummary] {
+        processNameAggregator.aggregate(samples)
     }
 
     var totalDownloadedBytes: UInt64 { saturatingSum(samples.map(\.downloadedBytes)) }
