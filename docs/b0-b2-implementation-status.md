@@ -1,6 +1,6 @@
 # B0–B2 implementation status
 
-Compact status for the Advanced Observability track.
+Compact status for the **signed Advanced Provider** track. The no-entitlement `App Activity Preview` is a separate Phase 4 capability; see `non-privileged-app-activity.md`. Preview rows never fill gaps in signed-provider evidence.
 
 ## B0 — Architecture and entitlement spike
 
@@ -85,31 +85,32 @@ Real-Mac B1 acceptance remains open:
 
 There is intentionally no durable per-app SwiftData history yet. Add it only after the live evidence source and provider-restart semantics pass B1 validation.
 
-## B2 — Advanced Observability product mode
+## B2 — Advanced Provider product mode
 
-Status: **opt-in product mode implemented for prototype use; signed-provider runtime validation remains open.**
+Status: **signed-provider product mode implemented for prototype use; runtime validation remains open.**
 
-Implemented:
+The `Applications` destination is now always discoverable as a Beta product surface because it can also host the non-privileged App Activity Preview. The signed provider itself remains optional and capability-gated.
 
-- [x] dedicated `Applications` section shown only after explicit opt-in;
+Implemented for the signed provider:
+
+- [x] explicit Signed Provider capability/status inside Applications Beta;
 - [x] Disabled / Provider unavailable / Awaiting approval / Active / Degraded states;
-- [x] Applications table with Local / External / Unknown flow evidence;
-- [x] per-application detail view;
+- [x] runtime entitlement detection prevents expected ad-hoc absence from appearing as a setup failure;
+- [x] Applications table with Local / External / Unknown flow evidence when provider data exists;
+- [x] per-application provider detail view;
 - [x] byte values withheld from authoritative presentation while capability is `notValidated`;
 - [x] provider runtime diagnostics shown in the Applications status surface;
-- [x] Advanced Observability Settings section;
-- [x] embedded system-extension activation action;
+- [x] separate Advanced Provider controls in Settings;
+- [x] embedded system-extension activation action only when the host has the install entitlement;
 - [x] macOS approval state surfaced;
 - [x] `NEFilterManager` enable/disable lifecycle;
 - [x] explicit confirmation before enabling because macOS content filters are exclusive;
 - [x] restart-required state;
 - [x] provider / bridge / byte-accounting status visible;
-- [x] system-extension XPC is the preferred evidence path;
-- [x] developer file snapshot exists only as deterministic UI fallback;
-- [x] core Analytics and Monitor remain fully usable with advanced mode off;
-- [x] no fake application rows in normal builds;
-- [x] normal ad-hoc CI build reports provider unavailable rather than pretending activation;
-- [x] shield brand system applied to app shell, menu bar, accent and advanced-status surfaces.
+- [x] system-extension XPC is the preferred signed evidence path;
+- [x] core Overview / Trends / Networks / Monitor remain fully usable with the provider unavailable;
+- [x] no fake provider application rows in normal builds;
+- [x] shield brand system and redesigned macOS navigation/status surfaces applied.
 
 Still required before production B2:
 
@@ -117,22 +118,32 @@ Still required before production B2:
 - [ ] authenticated XPC runtime validation;
 - [ ] B1 source-app/locality/byte acceptance;
 - [ ] advanced coverage model suitable for user-facing evidence;
-- [ ] persisted per-app buckets only after evidence semantics are proven;
-- [ ] retention/reset controls for advanced data;
+- [ ] persisted signed-provider per-app buckets only after evidence semantics are proven;
+- [ ] retention/reset controls for advanced evidence;
 - [ ] accessibility/usability pass with real provider states;
 - [ ] performance/network-safety validation;
 - [ ] decision on content-filter exclusivity as a product constraint;
 - [ ] final Developer ID/notarization path.
 
+## Phase 4 relationship
+
+`App Activity Preview` is intentionally outside B0–B2 evidence semantics.
+
+Safe Preview claim:
+
+> Traffic Monitoring can show best-effort process-level network totals locally on macOS without installing a system extension.
+
+The Preview does **not** provide Local / External / Unknown classification, complete coverage, persistent per-app evidence, or privacy conclusions. Those remain responsibilities of the signed provider/audit path after validation.
+
 ## Claim boundary
 
-Safe branch claim:
+Safe signed-provider branch claim:
 
-> Traffic Monitoring contains an opt-in Advanced Observability prototype: an embedded macOS Filter Data Provider system extension, audit-token application identity path, local/external/unknown classification, aggregate flow statistics, authenticated XPC evidence bridge, installation/configuration lifecycle, runtime diagnostics, and Applications UI. Source/build/package gates pass in CI, but real per-app evidence remains experimental until a properly signed provider is activated and validated on a Mac.
+> Traffic Monitoring contains an optional Advanced Provider prototype: an embedded macOS Filter Data Provider system extension, audit-token application identity path, local/external/unknown classification, aggregate flow statistics, authenticated XPC evidence bridge, installation/configuration lifecycle, runtime diagnostics, and Applications UI. Source/build/package gates pass in CI, but real signed-provider evidence remains experimental until a properly signed provider is activated and validated on a Mac.
 
 Unsafe claims:
 
-- `Traffic Monitoring measures validated per-app traffic in the downloadable ad-hoc build.`
-- `Traffic Monitoring verifies that an app is local-only.`
-- `Application byte totals are validated.`
+- `Traffic Monitoring measures validated per-app Local/External traffic in the downloadable ad-hoc build.`
+- `App Activity Preview verifies that an app is local-only.`
+- `Advanced Provider application byte totals are validated.`
 - `No external traffic` without complete validated provider coverage and later audit semantics.
