@@ -119,4 +119,70 @@ final class LightweightApplicationActivityAggregatorTests: XCTestCase {
         XCTAssertEqual(summary.uploadedBytes, UInt64.max)
         XCTAssertEqual(summary.totalBytes, UInt64.max)
     }
+
+    func testProcessNameAggregationCombinesSameNameAcrossPIDs() throws {
+        let now = Date(timeIntervalSince1970: 1_786_180_800)
+        let app = LightweightApplicationIdentity(name: "Antigravity IDE", bundleIdentifier: "com.example.antigravity")
+        let samples = [
+            LightweightProcessNetworkSample(
+                processName: "language_server",
+                processIdentifier: 45_816,
+                downloadedBytes: 373_200_000,
+                uploadedBytes: 14_200_000,
+                observedAt: now,
+                application: app
+            ),
+            LightweightProcessNetworkSample(
+                processName: "language_server",
+                processIdentifier: 80_449,
+                downloadedBytes: 87_500_000,
+                uploadedBytes: 6_800_000,
+                observedAt: now,
+                application: app
+            ),
+            LightweightProcessNetworkSample(
+                processName: "language_server",
+                processIdentifier: 30_285,
+                downloadedBytes: 32_000_000,
+                uploadedBytes: 840_000,
+                observedAt: now,
+                application: app
+            )
+        ]
+
+        let summary = try XCTUnwrap(LightweightProcessNameActivityAggregator().aggregate(samples).first)
+        XCTAssertEqual(summary.processName, "language_server")
+        XCTAssertEqual(summary.processCount, 3)
+        XCTAssertEqual(summary.downloadedBytes, 492_700_000)
+        XCTAssertEqual(summary.uploadedBytes, 21_840_000)
+        XCTAssertEqual(summary.totalBytes, 514_540_000)
+        XCTAssertEqual(summary.applicationNames, ["Antigravity IDE"])
+    }
+
+    func testProcessNameAggregationCanSpanApplicationsWithoutMergingApplicationIdentity() throws {
+        let now = Date(timeIntervalSince1970: 1_786_180_800)
+        let samples = [
+            LightweightProcessNetworkSample(
+                processName: "Electron",
+                processIdentifier: 100,
+                downloadedBytes: 10,
+                uploadedBytes: 20,
+                observedAt: now,
+                application: LightweightApplicationIdentity(name: "App A", bundleIdentifier: "com.example.a")
+            ),
+            LightweightProcessNetworkSample(
+                processName: "Electron",
+                processIdentifier: 200,
+                downloadedBytes: 30,
+                uploadedBytes: 40,
+                observedAt: now,
+                application: LightweightApplicationIdentity(name: "App B", bundleIdentifier: "com.example.b")
+            )
+        ]
+
+        let summary = try XCTUnwrap(LightweightProcessNameActivityAggregator().aggregate(samples).first)
+        XCTAssertEqual(summary.processCount, 2)
+        XCTAssertEqual(summary.applicationNames, ["App A", "App B"])
+        XCTAssertEqual(summary.totalBytes, 100)
+    }
 }
