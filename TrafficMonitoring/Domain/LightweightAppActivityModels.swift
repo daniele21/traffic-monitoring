@@ -91,6 +91,43 @@ public struct LightweightApplicationNetworkSummary: Identifiable, Codable, Equat
     }
 }
 
+public struct LightweightProcessNameNetworkSummary: Identifiable, Codable, Equatable, Sendable {
+    public let processName: String
+    public let downloadedBytes: UInt64
+    public let uploadedBytes: UInt64
+    public let observedAt: Date
+    public let processes: [LightweightProcessNetworkSample]
+
+    public var id: String { processName.lowercased() }
+
+    public var totalBytes: UInt64 {
+        let (value, overflow) = downloadedBytes.addingReportingOverflow(uploadedBytes)
+        return overflow ? .max : value
+    }
+
+    public var processCount: Int { processes.count }
+
+    public var applicationNames: [String] {
+        Array(Set(processes.compactMap { $0.application?.name })).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+    }
+
+    public init(
+        processName: String,
+        downloadedBytes: UInt64,
+        uploadedBytes: UInt64,
+        observedAt: Date,
+        processes: [LightweightProcessNetworkSample]
+    ) {
+        self.processName = processName
+        self.downloadedBytes = downloadedBytes
+        self.uploadedBytes = uploadedBytes
+        self.observedAt = observedAt
+        self.processes = processes
+    }
+}
+
 public enum LightweightAppActivityState: String, Codable, Equatable, Sendable {
     case disabled
     case available
