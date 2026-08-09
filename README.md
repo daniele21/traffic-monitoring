@@ -22,14 +22,16 @@ Traffic Monitoring currently provides:
 - Wi-Fi SSID enrichment when macOS permission allows it;
 - `isExpensive` / `isConstrained` path metadata;
 - local SwiftData history with efficient 5-minute usage/coverage buckets and ~15-second checkpoints;
-- branded native macOS navigation: **Overview, Trends, Networks, Applications Beta, Monitor**;
+- a branded native macOS sidebar: **Overview, Trends, Networks, Applications Beta, Monitor**;
+- a redesigned Overview hero with live current-network/rate context, period totals, peaks and coverage;
+- modern network cards, quality/status badges, friendly aliases and network detail;
 - Today / 7 days / 30 days / This month / All time / Custom ranges;
 - evidence quality and observation coverage;
 - explicit unknown Wi-Fi identity;
-- friendly network aliases and network detail;
 - versioned JSON / CSV **network evidence** export;
 - a best-effort **App Activity Preview** that works without an Apple Developer Program;
 - an optional signed **Advanced Provider** prototype for future richer app/locality evidence;
+- a cleaned-up menu-bar popover and Settings experience that distinguishes unavailable capabilities from real failures;
 - GitHub Actions build, tests, Release packaging, and downloadable macOS artifact.
 
 Core Analytics answers questions such as:
