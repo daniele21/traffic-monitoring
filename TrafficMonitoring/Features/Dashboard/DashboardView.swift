@@ -5,6 +5,7 @@ struct DashboardView: View {
     @ObservedObject var diagnostics: DiagnosticsViewModel
     let usageStore: LocalUsageStore
     @ObservedObject var advancedObservability: AdvancedObservabilityController
+    @ObservedObject var lightweightAppActivity: LightweightAppActivityController
 
     @State private var destination: DashboardDestination = .overview
     @Environment(\.openWindow) private var openWindow
@@ -23,12 +24,7 @@ struct DashboardView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
-                BrandProductHeader(
-                    title: "Traffic Monitoring",
-                    subtitle: "Local network observability",
-                    compact: true
-                )
-
+                BrandProductHeader(title: "Traffic Monitoring", subtitle: "Local network observability", compact: true)
                 Divider()
             }
             .padding(.horizontal, 16)
@@ -41,7 +37,6 @@ struct DashboardView: View {
                     sidebarRow(.trends)
                     sidebarRow(.networks)
                 }
-
                 Section("Evidence") {
                     sidebarRow(.applications)
                     sidebarRow(.monitor)
@@ -57,12 +52,8 @@ struct DashboardView: View {
                         .foregroundStyle(BrandTheme.signalCyan)
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Current network")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(diagnostics.currentNetworkName)
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
+                        Text("Current network").font(.caption2).foregroundStyle(.secondary)
+                        Text(diagnostics.currentNetworkName).font(.caption.weight(.semibold)).lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
@@ -109,10 +100,8 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(destination.title)
-                        .font(.largeTitle.bold())
-                    Text(destination.subtitle)
-                        .foregroundStyle(.secondary)
+                    Text(destination.title).font(.largeTitle.bold())
+                    Text(destination.subtitle).foregroundStyle(.secondary)
                 }
                 Spacer()
                 BrandLiveIndicator(label: "Tracking live")
@@ -132,7 +121,7 @@ struct DashboardView: View {
                 case .networks:
                     PersistentAnalyticsView(diagnostics: diagnostics, store: usageStore, section: .networks)
                 case .applications:
-                    ApplicationsView(advanced: advancedObservability)
+                    ApplicationsView(advanced: advancedObservability, lightweight: lightweightAppActivity)
                 case .monitor:
                     monitorView
                 }
@@ -146,36 +135,16 @@ struct DashboardView: View {
     private var monitorView: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
-                BrandMetricCard(
-                    title: "Current network",
-                    value: diagnostics.currentNetworkName,
-                    detail: "Network currently carrying traffic",
-                    icon: networkIcon,
-                    tint: BrandTheme.signalCyan
-                )
-                BrandMetricCard(
-                    title: "Download now",
-                    value: rate(diagnostics.totalDownloadBytesPerSecond),
-                    detail: "Across measured physical interfaces",
-                    icon: "arrow.down",
-                    tint: BrandTheme.networkBlue
-                )
-                BrandMetricCard(
-                    title: "Upload now",
-                    value: rate(diagnostics.totalUploadBytesPerSecond),
-                    detail: "Across measured physical interfaces",
-                    icon: "arrow.up",
-                    tint: BrandTheme.signalCyan
-                )
+                BrandMetricCard(title: "Current network", value: diagnostics.currentNetworkName, detail: "Network currently carrying traffic", icon: networkIcon, tint: BrandTheme.signalCyan)
+                BrandMetricCard(title: "Download now", value: rate(diagnostics.totalDownloadBytesPerSecond), detail: "Across measured physical interfaces", icon: "arrow.down", tint: BrandTheme.networkBlue)
+                BrandMetricCard(title: "Upload now", value: rate(diagnostics.totalUploadBytesPerSecond), detail: "Across measured physical interfaces", icon: "arrow.up", tint: BrandTheme.signalCyan)
             }
 
             BrandCard {
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "wrench.and.screwdriver")
-                        .foregroundStyle(BrandTheme.networkBlue)
+                    Image(systemName: "wrench.and.screwdriver").foregroundStyle(BrandTheme.networkBlue)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Technical measurement view")
-                            .font(.headline)
+                        Text("Technical measurement view").font(.headline)
                         Text("Monitor exposes interface-level counters for diagnostics. Interface totals and last-sample changes are not the same thing as usage attributed to a Wi-Fi network.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -199,12 +168,7 @@ struct DashboardView: View {
 }
 
 enum DashboardDestination: String, CaseIterable, Identifiable, Hashable {
-    case overview
-    case trends
-    case networks
-    case applications
-    case monitor
-
+    case overview, trends, networks, applications, monitor
     var id: Self { self }
 
     var title: String {
@@ -222,7 +186,7 @@ enum DashboardDestination: String, CaseIterable, Identifiable, Hashable {
         case .overview: "A clear snapshot of usage, coverage, and the networks that matter most."
         case .trends: "See when traffic grows, where peaks happen, and which network caused them."
         case .networks: "Compare networks, rename them, and inspect evidence quality."
-        case .applications: "Experimental application-level activity with explicit capability limits."
+        case .applications: "See process-level activity now, with richer signed evidence when available."
         case .monitor: "Live technical interface counters for measurement diagnostics."
         }
     }
