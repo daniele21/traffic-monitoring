@@ -148,6 +148,39 @@ The main product surfaces are organized around the questions a user is trying to
 | **Monitor** | What are the underlying interface counters and last-sample diagnostics? |
 | **Settings** | How are Wi-Fi identity, local storage, App Activity Preview, and the optional Advanced Provider configured? |
 
+### Product surfaces in action
+
+#### 1. Overview Dashboard
+A high-level snapshot of total usage, download/upload breakdown, observation coverage, data quality, and top network contexts:
+<p align="center">
+  <img src="docs/screenshot/overview.png" alt="Overview Dashboard" width="100%">
+</p>
+
+#### 2. Trends Analytics
+Time-series bandwidth breakdown with peak traffic detection, hourly analysis, and network isolation:
+<p align="center">
+  <img src="docs/screenshot/trends.png" alt="Trends Analytics" width="100%">
+</p>
+
+#### 3. Networks Breakdown
+Comparative analysis across Wi-Fi networks, mobile hotspots, and Ethernet interfaces with identity classification and evidence quality indicators:
+<p align="center">
+  <img src="docs/screenshot/networks.png" alt="Networks Breakdown" width="100%">
+</p>
+
+#### 4. Applications (Beta)
+Non-privileged process network activity summary (`nettop`) aggregated by macOS application bundle, process name, or individual PID:
+<p align="center">
+  <img src="docs/screenshot/applications.png" alt="Applications Beta" width="100%">
+</p>
+
+#### 5. Technical Monitor
+Real-time interface counter readings, raw 64-bit Darwin kernel byte statistics, and 2-second delta measurement diagnostics:
+<p align="center">
+  <img src="docs/screenshot/monitor.png" alt="Technical Monitor" width="100%">
+</p>
+
+
 ### Core network evidence
 
 Traffic Monitoring keeps usage and evidence quality separate:
