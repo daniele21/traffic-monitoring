@@ -3,6 +3,7 @@ import SwiftUI
 
 private enum LightweightActivityViewMode: String, CaseIterable, Identifiable {
     case applications = "Applications"
+    case processNames = "Process names"
     case processes = "Processes"
 
     var id: String { rawValue }
@@ -49,14 +50,14 @@ struct ApplicationsView: View {
                         BrandStatusPill(text: "Local-only", icon: "lock.fill", tint: BrandTheme.healthy)
                     }
 
-                    Text("See which applications are using the network.")
+                    Text("See which applications and processes are using the network.")
                         .font(.title2.bold())
                         .foregroundStyle(.white)
 
-                    Text("Traffic Monitoring groups related process activity into applications when macOS can resolve the owning app, while keeping process-level detail available for diagnostics.")
+                    Text("Traffic Monitoring can aggregate activity by owning application, by process name across multiple PIDs, or show individual process rows for diagnostics.")
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.72))
-                        .frame(maxWidth: 620, alignment: .leading)
+                        .frame(maxWidth: 650, alignment: .leading)
                 }
 
                 Spacer()
@@ -103,7 +104,7 @@ struct ApplicationsView: View {
                     Image(systemName: "info.circle.fill").foregroundStyle(BrandTheme.networkBlue)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Activity preview, not privacy evidence").font(.callout.weight(.semibold))
-                        Text("Process totals are grouped under their owning macOS application when that identity can be resolved. This view still cannot tell whether traffic stayed on your Mac, went to your LAN, or reached the Internet. Totals can include activity from before you opened Traffic Monitoring and are not persisted.")
+                        Text("Process totals are grouped under their owning macOS application when that identity can be resolved. You can also aggregate all PIDs with the same process name. This view still cannot tell whether traffic stayed on your Mac, went to your LAN, or reached the Internet. Totals can include activity from before you opened Traffic Monitoring and are not persisted.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -131,9 +132,9 @@ struct ApplicationsView: View {
                 }
             } else {
                 HStack(spacing: 12) {
-                    BrandMetricCard(title: "Visible applications", value: "\(lightweight.applications.count)", detail: "Grouped from \(lightweight.samples.count) process rows", icon: "square.grid.2x2", tint: BrandTheme.networkBlue)
-                    BrandMetricCard(title: "Downloaded", value: bytes(lightweight.totalDownloadedBytes), detail: "Across visible applications", icon: "arrow.down", tint: BrandTheme.networkBlue)
-                    BrandMetricCard(title: "Uploaded", value: bytes(lightweight.totalUploadedBytes), detail: "Across visible applications", icon: "arrow.up", tint: BrandTheme.signalCyan)
+                    BrandMetricCard(title: previewEntityTitle, value: previewEntityCount, detail: previewEntityDetail, icon: "square.grid.2x2", tint: BrandTheme.networkBlue)
+                    BrandMetricCard(title: "Downloaded", value: bytes(lightweight.totalDownloadedBytes), detail: "Across the latest visible sample", icon: "arrow.down", tint: BrandTheme.networkBlue)
+                    BrandMetricCard(title: "Uploaded", value: bytes(lightweight.totalUploadedBytes), detail: "Across the latest visible sample", icon: "arrow.up", tint: BrandTheme.signalCyan)
                     BrandMetricCard(title: "Last sample", value: sampleAge, detail: "Refreshes about every 15 seconds", icon: "clock", tint: BrandTheme.signalCyan)
                 }
 
@@ -141,8 +142,8 @@ struct ApplicationsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .center, spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(activityViewMode == .applications ? "Application activity" : "Process activity").font(.headline)
-                                Text(activityViewMode == .applications ? "Related processes are aggregated under their owning application." : "Raw process-level rows from the latest macOS sample.")
+                                Text(activitySectionTitle).font(.headline)
+                                Text(activitySectionSubtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -154,15 +155,18 @@ struct ApplicationsView: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
-                            .frame(width: 210)
-                            TextField(activityViewMode == .applications ? "Filter applications" : "Filter processes", text: $searchText)
+                            .frame(width: 330)
+                            TextField(searchPlaceholder, text: $searchText)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 220)
                         }
 
-                        if activityViewMode == .applications {
+                        switch activityViewMode {
+                        case .applications:
                             applicationActivityTable
-                        } else {
+                        case .processNames:
+                            processNameActivityTable
+                        case .processes:
                             processActivityTable
                         }
                     }
@@ -198,6 +202,41 @@ struct ApplicationsView: View {
                 TableColumn("Downloaded") { row in Text(bytes(row.downloadedBytes)).monospacedDigit() }.width(min: 110, ideal: 130)
                 TableColumn("Uploaded") { row in Text(bytes(row.uploadedBytes)).monospacedDigit() }.width(min: 110, ideal: 130)
                 TableColumn("Total") { row in Text(bytes(row.totalBytes)).fontWeight(.semibold).monospacedDigit() }.width(min: 110, ideal: 130)
+            }
+            .frame(minHeight: 330)
+        }
+    }
+
+    @ViewBuilder
+    private var processNameActivityTable: some View {
+        if filteredProcessNameSummaries.isEmpty {
+            ContentUnavailableView(
+                searchText.isEmpty ? "Waiting for network activity" : "No matching process names",
+                systemImage: searchText.isEmpty ? "network" : "magnifyingglass",
+                description: Text(searchText.isEmpty ? "Use an app that accesses the network, then refresh or wait for the next sample." : "Try another process or application name.")
+            )
+            .frame(minHeight: 250)
+        } else {
+            Table(filteredProcessNameSummaries) {
+                TableColumn("Process name") { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.processName).fontWeight(.medium).lineLimit(1)
+                        if row.applicationNames.isEmpty {
+                            Text("Application unresolved").font(.caption2).foregroundStyle(.secondary)
+                        } else {
+                            Text(row.applicationNames.joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }.width(min: 210, ideal: 285)
+                TableColumn("Instances") { row in
+                    Text("\(row.processCount)").monospacedDigit()
+                }.width(min: 70, ideal: 85)
+                TableColumn("Downloaded") { row in Text(bytes(row.downloadedBytes)).monospacedDigit() }.width(min: 105, ideal: 120)
+                TableColumn("Uploaded") { row in Text(bytes(row.uploadedBytes)).monospacedDigit() }.width(min: 105, ideal: 120)
+                TableColumn("Total") { row in Text(bytes(row.totalBytes)).fontWeight(.semibold).monospacedDigit() }.width(min: 105, ideal: 120)
+                TableColumn("Share") { row in
+                    Text(share(row.totalBytes)).monospacedDigit().foregroundStyle(.secondary)
+                }.width(min: 65, ideal: 75)
             }
             .frame(minHeight: 330)
         }
@@ -370,6 +409,57 @@ struct ApplicationsView: View {
 
     // MARK: - Helpers
 
+    private var previewEntityTitle: String {
+        switch activityViewMode {
+        case .applications: "Applications"
+        case .processNames: "Process names"
+        case .processes: "Process rows"
+        }
+    }
+
+    private var previewEntityCount: String {
+        switch activityViewMode {
+        case .applications: "\(lightweight.applications.count)"
+        case .processNames: "\(lightweight.processNames.count)"
+        case .processes: "\(lightweight.samples.count)"
+        }
+    }
+
+    private var previewEntityDetail: String {
+        switch activityViewMode {
+        case .applications: "Grouped from \(lightweight.samples.count) process rows"
+        case .processNames: "Aggregated across matching PIDs"
+        case .processes: "Individual PID-level rows"
+        }
+    }
+
+    private var activitySectionTitle: String {
+        switch activityViewMode {
+        case .applications: "Application activity"
+        case .processNames: "Process-name analytics"
+        case .processes: "Process activity"
+        }
+    }
+
+    private var activitySectionSubtitle: String {
+        switch activityViewMode {
+        case .applications:
+            "Related processes are aggregated under their owning application."
+        case .processNames:
+            "All PIDs with the same process name are combined into one ranked total."
+        case .processes:
+            "Raw process-level rows from the latest macOS sample."
+        }
+    }
+
+    private var searchPlaceholder: String {
+        switch activityViewMode {
+        case .applications: "Filter applications"
+        case .processNames: "Filter process names"
+        case .processes: "Filter processes"
+        }
+    }
+
     private var filteredLightweightApplications: [LightweightApplicationNetworkSummary] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return lightweight.applications }
@@ -377,6 +467,15 @@ struct ApplicationsView: View {
             summary.applicationName.localizedCaseInsensitiveContains(query)
                 || (summary.bundleIdentifier?.localizedCaseInsensitiveContains(query) ?? false)
                 || summary.processes.contains { $0.processName.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    private var filteredProcessNameSummaries: [LightweightProcessNameNetworkSummary] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return lightweight.processNames }
+        return lightweight.processNames.filter { summary in
+            summary.processName.localizedCaseInsensitiveContains(query)
+                || summary.applicationNames.contains { $0.localizedCaseInsensitiveContains(query) }
         }
     }
 
@@ -393,6 +492,13 @@ struct ApplicationsView: View {
             }
         }
         return Array(source.prefix(200))
+    }
+
+    private func share(_ value: UInt64) -> String {
+        guard lightweight.totalBytes > 0 else { return "0%" }
+        let percentage = Double(value) / Double(lightweight.totalBytes) * 100
+        if percentage >= 10 { return String(format: "%.0f%%", percentage) }
+        return String(format: "%.1f%%", percentage)
     }
 
     private var sampleAge: String {
