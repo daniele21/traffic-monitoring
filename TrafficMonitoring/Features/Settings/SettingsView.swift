@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var locationAuthorization: LocationAuthorizationController
     @ObservedObject var advancedObservability: AdvancedObservabilityController
     @ObservedObject var advancedObservabilityInstaller: AdvancedObservabilityInstaller
+    @ObservedObject var lightweightAppActivity: LightweightAppActivityController
     @State private var showAdvancedEnableConfirmation = false
 
     private let runtimeCapabilities = AdvancedObservabilityRuntimeCapabilities.current
@@ -18,14 +19,14 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     trackingCard
                     wifiCard
-                    advancedCard
+                    applicationsCard
                 }
                 .padding(22)
             }
         }
-        .frame(width: 760, height: 720)
+        .frame(width: 780, height: 740)
         .confirmationDialog(
-            "Enable Advanced Observability?",
+            "Enable the signed Advanced Provider?",
             isPresented: $showAdvancedEnableConfirmation,
             titleVisibility: .visible
         ) {
@@ -35,7 +36,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("macOS may ask you to approve the Traffic Monitoring system extension. Enabling its content filter can disable another content filter currently active on this Mac. Normal Traffic Monitoring analytics do not need this feature.")
+            Text("macOS may ask you to approve the Traffic Monitoring system extension. Enabling its content filter can disable another content filter currently active on this Mac. Normal analytics and App Activity Preview do not require it.")
         }
     }
 
@@ -43,7 +44,7 @@ struct SettingsView: View {
         HStack(spacing: 14) {
             BrandProductHeader(
                 title: "Settings",
-                subtitle: "Control network identification, local data, and experimental application visibility.",
+                subtitle: "Control network identification, local data, and application visibility.",
                 compact: true
             )
             Spacer()
@@ -58,25 +59,12 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 BrandSectionHeader(
                     title: "Tracking & data",
-                    subtitle: "Core traffic counting works locally and does not depend on the experimental system component.",
+                    subtitle: "Core traffic counting is local and independent from all application-level features.",
                     icon: "waveform.path.ecg"
                 )
-
                 Divider()
-
-                settingRow(
-                    icon: "timer",
-                    title: "Sampling",
-                    detail: "Physical interface counters are sampled approximately every 2 seconds.",
-                    trailing: "2 sec"
-                )
-
-                settingRow(
-                    icon: "externaldrive.fill.badge.checkmark",
-                    title: "History",
-                    detail: "Analytics are persisted locally in efficient buckets; no analytics backend is required.",
-                    trailing: "On this Mac"
-                )
+                settingRow(icon: "timer", title: "Sampling", detail: "Physical interface counters are sampled approximately every 2 seconds.", trailing: "2 sec")
+                settingRow(icon: "externaldrive.fill.badge.checkmark", title: "History", detail: "Analytics are persisted locally in efficient buckets; no analytics backend is required.", trailing: "On this Mac")
             }
         }
     }
@@ -89,13 +77,11 @@ struct SettingsView: View {
                     subtitle: "Location permission is used only so macOS can reveal the current Wi-Fi SSID for local grouping.",
                     icon: "wifi"
                 )
-
                 Divider()
 
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Network identification")
-                            .font(.headline)
+                        Text("Network identification").font(.headline)
                         Text("Traffic is still counted when permission is denied. Without the SSID, Wi-Fi usage is grouped under an unnamed network instead of being discarded.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -109,9 +95,7 @@ struct SettingsView: View {
                 }
 
                 if locationAuthorization.canRequest {
-                    Button {
-                        locationAuthorization.requestForWiFiName()
-                    } label: {
+                    Button { locationAuthorization.requestForWiFiName() } label: {
                         Label("Allow Wi-Fi network names", systemImage: "location.fill")
                     }
                     .buttonStyle(.borderedProminent)
@@ -128,13 +112,13 @@ struct SettingsView: View {
         }
     }
 
-    private var advancedCard: some View {
+    private var applicationsCard: some View {
         BrandCard(accent: BrandTheme.signalCyan.opacity(0.22)) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top) {
                     BrandSectionHeader(
                         title: "Applications Beta",
-                        subtitle: "Optional app-level network visibility. Core analytics remain fully usable when this is off or unavailable.",
+                        subtitle: "Two capability levels: a lightweight preview that works today, plus an optional signed provider for richer flow evidence.",
                         icon: "square.grid.2x2"
                     )
                     BrandStatusPill(text: "BETA", tint: BrandTheme.signalCyan)
@@ -142,137 +126,130 @@ struct SettingsView: View {
 
                 Divider()
 
+                lightweightSettings
+                Divider()
+                signedProviderSettings
+            }
+        }
+    }
+
+    private var lightweightSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("App Activity Preview").font(.headline)
+                    Text("Shows best-effort process-level network totals while the Applications screen is open. No Apple Developer Program or privileged component is required.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
                 Toggle(
-                    "Enable Applications Beta",
+                    "",
                     isOn: Binding(
-                        get: { advancedObservability.isEnabled },
-                        set: { advancedObservability.setEnabled($0) }
+                        get: { lightweightAppActivity.isEnabled },
+                        set: { lightweightAppActivity.setEnabled($0) }
                     )
                 )
-                .font(.headline)
+                .labelsHidden()
+            }
 
-                HStack(spacing: 10) {
-                    capabilityTile(
-                        title: "System component",
-                        value: runtimeCapabilities.canInstallSystemExtension ? advancedObservabilityInstaller.state.title : "Requires signed build",
-                        icon: runtimeCapabilities.canInstallSystemExtension ? "checkmark.shield" : "signature",
-                        tint: runtimeCapabilities.canInstallSystemExtension ? BrandTheme.networkBlue : BrandTheme.warning
-                    )
-                    capabilityTile(
-                        title: "Provider",
-                        value: advancedObservability.providerState.title,
-                        icon: "network.badge.shield.half.filled",
-                        tint: BrandTheme.statusColor(for: advancedObservability.providerState)
-                    )
-                    capabilityTile(
-                        title: "Byte accounting",
-                        value: advancedObservability.byteAccounting.title,
-                        icon: "number",
-                        tint: advancedObservability.byteAccounting == .validated ? BrandTheme.healthy : .secondary
-                    )
-                }
+            HStack(spacing: 10) {
+                capabilityTile(title: "Availability", value: lightweightAppActivity.state.title, icon: "waveform.path.ecg", tint: lightweightAppActivity.state == .available ? BrandTheme.healthy : .secondary)
+                capabilityTile(title: "Locality", value: "Not available", icon: "point.3.connected.trianglepath.dotted", tint: .secondary)
+                capabilityTile(title: "Persistence", value: "Live only", icon: "clock", tint: BrandTheme.networkBlue)
+            }
 
-                if runtimeCapabilities.canInstallSystemExtension {
-                    HStack {
-                        Button {
-                            showAdvancedEnableConfirmation = true
-                        } label: {
-                            Label("Install & enable provider", systemImage: "shield.lefthalf.filled")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isInstallationBusy)
-
-                        Button("Disable filter") {
-                            advancedObservabilityInstaller.disableFilter()
-                        }
-                        .disabled(advancedObservabilityInstaller.state == .disabling)
-
-                        Spacer()
-
-                        Button {
-                            advancedObservability.refresh()
-                        } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
-                        }
-                    }
-                } else {
-                    BrandCard(padding: 12, accent: BrandTheme.warning.opacity(0.28)) {
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "signature")
-                                .foregroundStyle(BrandTheme.warning)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Advanced provider unavailable in this build")
-                                    .font(.callout.weight(.semibold))
-                                Text("This ad-hoc build is intentionally missing Apple's system-extension entitlement. Nothing is broken: Overview, Trends, Networks, Monitor, local history, and export continue to work normally.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-
-                Label(
-                    "A signed provider can observe aggregate source-application flow metadata. Packet payloads and browsing content are not stored or sent to the app.",
-                    systemImage: "hand.raised.fill"
-                )
+            Label("Preview values are activity hints, not privacy evidence. They do not distinguish LAN from Internet traffic and can include process activity from before the preview started.", systemImage: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
 
-                Label(
-                    "macOS allows one active content-filter configuration at a time. Enabling the signed provider can replace another active content filter, so Traffic Monitoring always asks first.",
-                    systemImage: "exclamationmark.shield"
+    private var signedProviderSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Advanced Provider").font(.headline)
+                    Text("Optional signed system-extension path for source application and Local / External / Unknown flow evidence.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                BrandStatusPill(
+                    text: runtimeCapabilities.canInstallSystemExtension ? advancedObservability.providerState.title : "Signed build required",
+                    icon: runtimeCapabilities.canInstallSystemExtension ? "checkmark.shield" : "signature",
+                    tint: runtimeCapabilities.canInstallSystemExtension ? BrandTheme.statusColor(for: advancedObservability.providerState) : BrandTheme.warning
                 )
+            }
+
+            HStack(spacing: 10) {
+                capabilityTile(title: "System component", value: runtimeCapabilities.canInstallSystemExtension ? advancedObservabilityInstaller.state.title : "Not entitled", icon: "signature", tint: runtimeCapabilities.canInstallSystemExtension ? BrandTheme.networkBlue : BrandTheme.warning)
+                capabilityTile(title: "Provider", value: advancedObservability.providerState.title, icon: "network.badge.shield.half.filled", tint: BrandTheme.statusColor(for: advancedObservability.providerState))
+                capabilityTile(title: "Byte accounting", value: advancedObservability.byteAccounting.title, icon: "number", tint: advancedObservability.byteAccounting == .validated ? BrandTheme.healthy : .secondary)
+            }
+
+            if runtimeCapabilities.canInstallSystemExtension {
+                HStack {
+                    Button { showAdvancedEnableConfirmation = true } label: {
+                        Label("Install & enable provider", systemImage: "shield.lefthalf.filled")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isInstallationBusy)
+
+                    Button("Disable filter") { advancedObservabilityInstaller.disableFilter() }
+                        .disabled(advancedObservabilityInstaller.state == .disabling)
+
+                    Spacer()
+                    Button { advancedObservability.refresh() } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                }
+            } else {
+                BrandCard(padding: 12, accent: BrandTheme.warning.opacity(0.28)) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "signature").foregroundStyle(BrandTheme.warning)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Nothing is broken").font(.callout.weight(.semibold))
+                            Text("This ad-hoc build cannot install Apple's system extension. Use App Activity Preview for process-level visibility; Overview, Trends, Networks, Monitor, history, and export all remain fully available.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            Label("A signed provider reports aggregate flow metadata only. Packet payloads and browsing content are not stored or sent to the app.", systemImage: "hand.raised.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Label("macOS allows one active content-filter configuration at a time, so enabling the signed provider can replace another active filter.", systemImage: "exclamationmark.shield")
                 .font(.caption)
                 .foregroundStyle(BrandTheme.warning)
 
-                if runtimeCapabilities.canInstallSystemExtension,
-                   advancedObservabilityInstaller.state == .awaitingUserApproval {
-                    Label("macOS is waiting for approval in System Settings.", systemImage: "person.badge.clock")
-                        .font(.caption)
-                        .foregroundStyle(BrandTheme.warning)
-                }
-
-                if runtimeCapabilities.canInstallSystemExtension,
-                   advancedObservabilityInstaller.state == .restartRequired {
-                    Label("Restart your Mac to complete the system-extension update.", systemImage: "restart")
-                        .font(.caption)
-                        .foregroundStyle(BrandTheme.warning)
-                }
-
-                if runtimeCapabilities.canInstallSystemExtension,
-                   let error = advancedObservabilityInstaller.lastError ?? advancedObservability.lastError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(BrandTheme.critical)
-                }
+            if runtimeCapabilities.canInstallSystemExtension,
+               let error = advancedObservabilityInstaller.lastError ?? advancedObservability.lastError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(BrandTheme.critical)
             }
         }
     }
 
     private func settingRow(icon: String, title: String, detail: String, trailing: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(BrandTheme.networkBlue)
-                .frame(width: 24)
+            Image(systemName: icon).foregroundStyle(BrandTheme.networkBlue).frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.callout.weight(.semibold))
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(trailing)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
+            Text(trailing).font(.callout.weight(.medium)).foregroundStyle(.secondary)
         }
     }
 
     private func capabilityTile(title: String, value: String, icon: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Label(title, systemImage: icon)
-                .font(.caption2)
-                .foregroundStyle(tint)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
+            Label(title, systemImage: icon).font(.caption2).foregroundStyle(tint)
+            Text(value).font(.caption.weight(.semibold)).lineLimit(1)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,10 +258,8 @@ struct SettingsView: View {
 
     private var isInstallationBusy: Bool {
         switch advancedObservabilityInstaller.state {
-        case .requestingActivation, .awaitingUserApproval, .configuringFilter, .disabling:
-            true
-        case .idle, .enabled, .restartRequired, .disabled, .failed:
-            false
+        case .requestingActivation, .awaitingUserApproval, .configuringFilter, .disabling: true
+        case .idle, .enabled, .restartRequired, .disabled, .failed: false
         }
     }
 }
