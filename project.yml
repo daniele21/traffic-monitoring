@@ -20,6 +20,7 @@ targets:
         link: false
       - sdk: NetworkExtension.framework
       - sdk: SystemExtensions.framework
+      - sdk: Security.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring
