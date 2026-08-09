@@ -1,12 +1,20 @@
 #if os(macOS)
 import SwiftUI
 
+private enum LightweightActivityViewMode: String, CaseIterable, Identifiable {
+    case applications = "Applications"
+    case processes = "Processes"
+
+    var id: String { rawValue }
+}
+
 struct ApplicationsView: View {
     @ObservedObject var advanced: AdvancedObservabilityController
     @ObservedObject var lightweight: LightweightAppActivityController
 
     @State private var detailSelection: ApplicationEvidenceSummary?
     @State private var searchText = ""
+    @State private var activityViewMode: LightweightActivityViewMode = .applications
 
     private let runtimeCapabilities = AdvancedObservabilityRuntimeCapabilities.current
 
@@ -41,11 +49,11 @@ struct ApplicationsView: View {
                         BrandStatusPill(text: "Local-only", icon: "lock.fill", tint: BrandTheme.healthy)
                     }
 
-                    Text("See which processes are using the network.")
+                    Text("See which applications are using the network.")
                         .font(.title2.bold())
                         .foregroundStyle(.white)
 
-                    Text("Traffic Monitoring separates a lightweight activity preview from richer signed evidence, so capability limits stay obvious instead of being hidden.")
+                    Text("Traffic Monitoring groups related process activity into applications when macOS can resolve the owning app, while keeping process-level detail available for diagnostics.")
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.72))
                         .frame(maxWidth: 620, alignment: .leading)
@@ -79,7 +87,7 @@ struct ApplicationsView: View {
             HStack(alignment: .bottom, spacing: 12) {
                 BrandSectionHeader(
                     title: "App Activity Preview",
-                    subtitle: "Best-effort process network totals from macOS. No Apple Developer Program or system extension is required.",
+                    subtitle: "Best-effort application and process network totals from macOS. No Apple Developer Program or system extension is required.",
                     icon: "square.stack.3d.up"
                 )
                 Spacer()
@@ -95,7 +103,7 @@ struct ApplicationsView: View {
                     Image(systemName: "info.circle.fill").foregroundStyle(BrandTheme.networkBlue)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Activity preview, not privacy evidence").font(.callout.weight(.semibold))
-                        Text("This view can show process-level bytes reported by macOS, but it cannot tell whether that traffic stayed on your Mac, went to your LAN, or reached the Internet. Totals can include activity from before you opened Traffic Monitoring and are not persisted.")
+                        Text("Process totals are grouped under their owning macOS application when that identity can be resolved. This view still cannot tell whether traffic stayed on your Mac, went to your LAN, or reached the Internet. Totals can include activity from before you opened Traffic Monitoring and are not persisted.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -107,7 +115,7 @@ struct ApplicationsView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("App Activity Preview is off").font(.headline)
-                            Text("Turn it on to sample process-level network totals only while this Applications screen is open.")
+                            Text("Turn it on to sample application and process network totals only while this Applications screen is open.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -117,55 +125,114 @@ struct ApplicationsView: View {
                 }
             } else if lightweight.state == .failed || lightweight.state == .unavailable {
                 BrandCard(accent: BrandTheme.warning.opacity(0.3)) {
-                    Label(lightweight.errorMessage ?? "Process activity preview is unavailable.", systemImage: "exclamationmark.triangle.fill")
+                    Label(lightweight.errorMessage ?? "Application activity preview is unavailable.", systemImage: "exclamationmark.triangle.fill")
                         .font(.callout)
                         .foregroundStyle(BrandTheme.warning)
                 }
             } else {
                 HStack(spacing: 12) {
-                    BrandMetricCard(title: "Visible processes", value: "\(lightweight.samples.count)", detail: "Non-zero totals in the latest sample", icon: "square.grid.2x2", tint: BrandTheme.networkBlue)
-                    BrandMetricCard(title: "Downloaded", value: bytes(lightweight.totalDownloadedBytes), detail: "Sum of visible process totals", icon: "arrow.down", tint: BrandTheme.networkBlue)
-                    BrandMetricCard(title: "Uploaded", value: bytes(lightweight.totalUploadedBytes), detail: "Sum of visible process totals", icon: "arrow.up", tint: BrandTheme.signalCyan)
+                    BrandMetricCard(title: "Visible applications", value: "\(lightweight.applications.count)", detail: "Grouped from \(lightweight.samples.count) process rows", icon: "square.grid.2x2", tint: BrandTheme.networkBlue)
+                    BrandMetricCard(title: "Downloaded", value: bytes(lightweight.totalDownloadedBytes), detail: "Across visible applications", icon: "arrow.down", tint: BrandTheme.networkBlue)
+                    BrandMetricCard(title: "Uploaded", value: bytes(lightweight.totalUploadedBytes), detail: "Across visible applications", icon: "arrow.up", tint: BrandTheme.signalCyan)
                     BrandMetricCard(title: "Last sample", value: sampleAge, detail: "Refreshes about every 15 seconds", icon: "clock", tint: BrandTheme.signalCyan)
                 }
 
                 BrandCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack {
+                        HStack(alignment: .center, spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Process activity").font(.headline)
-                                Text("Sorted by total bytes in the latest macOS sample.").font(.caption).foregroundStyle(.secondary)
+                                Text(activityViewMode == .applications ? "Application activity" : "Process activity").font(.headline)
+                                Text(activityViewMode == .applications ? "Related processes are aggregated under their owning application." : "Raw process-level rows from the latest macOS sample.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            TextField("Filter processes", text: $searchText)
+                            Picker("Activity view", selection: $activityViewMode) {
+                                ForEach(LightweightActivityViewMode.allCases) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(width: 210)
+                            TextField(activityViewMode == .applications ? "Filter applications" : "Filter processes", text: $searchText)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 220)
                         }
 
-                        if filteredLightweightSamples.isEmpty {
-                            ContentUnavailableView(
-                                searchText.isEmpty ? "Waiting for network activity" : "No matching processes",
-                                systemImage: searchText.isEmpty ? "network" : "magnifyingglass",
-                                description: Text(searchText.isEmpty ? "Use an app that accesses the network, then refresh or wait for the next sample." : "Try another process name.")
-                            )
-                            .frame(minHeight: 250)
+                        if activityViewMode == .applications {
+                            applicationActivityTable
                         } else {
-                            Table(filteredLightweightSamples) {
-                                TableColumn("Process") { row in
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(row.processName).fontWeight(.medium).lineLimit(1)
-                                        if let pid = row.processIdentifier { Text("PID \(pid)").font(.caption2).foregroundStyle(.secondary) }
-                                    }
-                                }.width(min: 220, ideal: 320)
-                                TableColumn("Downloaded") { row in Text(bytes(row.downloadedBytes)).monospacedDigit() }.width(min: 110, ideal: 130)
-                                TableColumn("Uploaded") { row in Text(bytes(row.uploadedBytes)).monospacedDigit() }.width(min: 110, ideal: 130)
-                                TableColumn("Total") { row in Text(bytes(row.totalBytes)).fontWeight(.semibold).monospacedDigit() }.width(min: 110, ideal: 130)
-                            }
-                            .frame(minHeight: 330)
+                            processActivityTable
                         }
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var applicationActivityTable: some View {
+        if filteredLightweightApplications.isEmpty {
+            ContentUnavailableView(
+                searchText.isEmpty ? "Waiting for network activity" : "No matching applications",
+                systemImage: searchText.isEmpty ? "network" : "magnifyingglass",
+                description: Text(searchText.isEmpty ? "Use an app that accesses the network, then refresh or wait for the next sample." : "Try another application, bundle identifier, or process name.")
+            )
+            .frame(minHeight: 250)
+        } else {
+            Table(filteredLightweightApplications) {
+                TableColumn("Application") { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.applicationName).fontWeight(.medium).lineLimit(1)
+                        if let bundleIdentifier = row.bundleIdentifier {
+                            Text(bundleIdentifier).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        } else {
+                            Text("Best-effort process group").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }.width(min: 220, ideal: 320)
+                TableColumn("Processes") { row in
+                    Text("\(row.processCount)").monospacedDigit()
+                }.width(min: 75, ideal: 90)
+                TableColumn("Downloaded") { row in Text(bytes(row.downloadedBytes)).monospacedDigit() }.width(min: 110, ideal: 130)
+                TableColumn("Uploaded") { row in Text(bytes(row.uploadedBytes)).monospacedDigit() }.width(min: 110, ideal: 130)
+                TableColumn("Total") { row in Text(bytes(row.totalBytes)).fontWeight(.semibold).monospacedDigit() }.width(min: 110, ideal: 130)
+            }
+            .frame(minHeight: 330)
+        }
+    }
+
+    @ViewBuilder
+    private var processActivityTable: some View {
+        if filteredLightweightSamples.isEmpty {
+            ContentUnavailableView(
+                searchText.isEmpty ? "Waiting for network activity" : "No matching processes",
+                systemImage: searchText.isEmpty ? "network" : "magnifyingglass",
+                description: Text(searchText.isEmpty ? "Use an app that accesses the network, then refresh or wait for the next sample." : "Try another process or application name.")
+            )
+            .frame(minHeight: 250)
+        } else {
+            Table(filteredLightweightSamples) {
+                TableColumn("Process") { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.processName).fontWeight(.medium).lineLimit(1)
+                        if let pid = row.processIdentifier { Text("PID \(pid)").font(.caption2).foregroundStyle(.secondary) }
+                    }
+                }.width(min: 190, ideal: 260)
+                TableColumn("Application") { row in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(row.application?.name ?? "Unresolved").lineLimit(1)
+                        if let identifier = row.application?.bundleIdentifier {
+                            Text(identifier).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }.width(min: 170, ideal: 230)
+                TableColumn("Downloaded") { row in Text(bytes(row.downloadedBytes)).monospacedDigit() }.width(min: 105, ideal: 120)
+                TableColumn("Uploaded") { row in Text(bytes(row.uploadedBytes)).monospacedDigit() }.width(min: 105, ideal: 120)
+                TableColumn("Total") { row in Text(bytes(row.totalBytes)).fontWeight(.semibold).monospacedDigit() }.width(min: 105, ideal: 120)
+            }
+            .frame(minHeight: 330)
         }
     }
 
@@ -303,10 +370,29 @@ struct ApplicationsView: View {
 
     // MARK: - Helpers
 
+    private var filteredLightweightApplications: [LightweightApplicationNetworkSummary] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return lightweight.applications }
+        return lightweight.applications.filter { summary in
+            summary.applicationName.localizedCaseInsensitiveContains(query)
+                || (summary.bundleIdentifier?.localizedCaseInsensitiveContains(query) ?? false)
+                || summary.processes.contains { $0.processName.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
     private var filteredLightweightSamples: [LightweightProcessNetworkSample] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return lightweight.samples }
-        return lightweight.samples.filter { $0.processName.localizedCaseInsensitiveContains(query) }
+        let source: [LightweightProcessNetworkSample]
+        if query.isEmpty {
+            source = lightweight.samples
+        } else {
+            source = lightweight.samples.filter { sample in
+                sample.processName.localizedCaseInsensitiveContains(query)
+                    || (sample.application?.name.localizedCaseInsensitiveContains(query) ?? false)
+                    || (sample.application?.bundleIdentifier?.localizedCaseInsensitiveContains(query) ?? false)
+            }
+        }
+        return Array(source.prefix(200))
     }
 
     private var sampleAge: String {
