@@ -13,97 +13,227 @@ struct NetworkDetailView: View {
     @State private var saveMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(row?.networkName ?? "Network details")
-                        .font(.title2.bold())
-                    Text("Observed usage and identity quality for the selected period.")
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            header
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let row {
+                        metrics(row)
+                        identityCard(row)
+                        aliasCard(row)
+                        trendCard
+                    } else {
+                        ContentUnavailableView("Network not found", systemImage: "network.slash")
+                            .frame(maxWidth: .infinity, minHeight: 420)
+                    }
                 }
-                Spacer()
-                Button("Close") { dismiss() }
+                .padding(22)
+            }
+        }
+        .frame(width: 940, height: 700)
+        .task { loadAlias() }
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(BrandTheme.networkBlue.opacity(0.11))
+                    .frame(width: 50, height: 50)
+                Image(systemName: row?.connectionKind == .wifi ? "wifi" : "network")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(BrandTheme.networkBlue)
             }
 
-            if let row {
-                HStack(spacing: 12) {
-                    metric("Total used", bytes(row.totalBytes), nil)
-                    metric("Downloaded", bytes(row.downloadedBytes), nil)
-                    metric("Uploaded", bytes(row.uploadedBytes), nil)
-                    metric(timeframe.peakLabel, peak.map { bytes($0.totalBytes) } ?? "—", peak.map { date($0.intervalStart) })
-                }
-
-                HStack(spacing: 14) {
-                    Label(row.connectionKind.rawValue, systemImage: row.connectionKind == .wifi ? "wifi" : "network")
-                    Label(analytics.identityQuality(for: row).title, systemImage: identityIcon(for: row))
-                    Text("First observed: \(date(row.firstSeenAt))")
-                    Text("Last observed: \(date(row.lastSeenAt))")
-                    if row.isExpensive {
-                        Label("Likely hotspot / expensive", systemImage: "iphone.radiowaves.left.and.right")
-                    }
-                    if row.isConstrained {
-                        Label("Constrained", systemImage: "gauge.with.dots.needle.33percent")
-                    }
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-                GroupBox("Display name") {
-                    HStack {
-                        TextField("Friendly name, e.g. Home or iPhone", text: $alias)
-                            .textFieldStyle(.roundedBorder)
-                        Button("Save alias") { saveAlias() }
-                        if let saveMessage {
-                            Text(saveMessage)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Usage trend")
-                        .font(.headline)
-
-                    if detailPoints.isEmpty {
-                        ContentUnavailableView("No usage in this period", systemImage: "chart.bar")
-                            .frame(minHeight: 220)
-                    } else {
-                        Chart(detailPoints) { point in
-                            BarMark(
-                                x: .value("Time", point.intervalStart),
-                                y: .value("Data used", Double(point.totalBytes))
-                            )
-
-                            if point.id == peak?.id {
-                                RuleMark(x: .value("Peak", point.intervalStart))
-                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .chartYAxis {
-                            AxisMarks { value in
-                                AxisGridLine()
-                                AxisValueLabel {
-                                    if let numeric = value.as(Double.self) {
-                                        Text(bytes(UInt64(max(0, numeric))))
-                                    }
-                                }
-                            }
-                        }
-                        .frame(minHeight: 260)
-                    }
-                }
-            } else {
-                ContentUnavailableView("Network not found", systemImage: "network.slash")
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row?.networkName ?? "Network details")
+                    .font(.title2.bold())
+                Text("Usage, identity quality, and history for \(timeframe.rawValue.lowercased()).")
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
+
+            if let row {
+                BrandStatusPill(
+                    text: analytics.identityQuality(for: row).title,
+                    icon: identityIcon(for: row),
+                    tint: BrandTheme.evidenceColor(for: analytics.identityQuality(for: row))
+                )
+            }
+
+            Button("Done") { dismiss() }
+                .keyboardShortcut(.defaultAction)
         }
-        .padding(22)
-        .frame(width: 900, height: 660)
-        .task { loadAlias() }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+    }
+
+    private func metrics(_ row: NetworkUsageHistoryRow) -> some View {
+        HStack(spacing: 12) {
+            BrandMetricCard(
+                title: "Total used",
+                value: bytes(row.totalBytes),
+                detail: "Measured on this network",
+                icon: "sum",
+                tint: BrandTheme.networkBlue
+            )
+            BrandMetricCard(
+                title: "Downloaded",
+                value: bytes(row.downloadedBytes),
+                detail: "Received by this Mac",
+                icon: "arrow.down",
+                tint: BrandTheme.networkBlue
+            )
+            BrandMetricCard(
+                title: "Uploaded",
+                value: bytes(row.uploadedBytes),
+                detail: "Sent by this Mac",
+                icon: "arrow.up",
+                tint: BrandTheme.signalCyan
+            )
+            BrandMetricCard(
+                title: timeframe.peakLabel,
+                value: peak.map { bytes($0.totalBytes) } ?? "—",
+                detail: peak.map { date($0.intervalStart) } ?? "No usage yet",
+                icon: "bolt.fill",
+                tint: BrandTheme.signalCyan
+            )
+        }
+    }
+
+    private func identityCard(_ row: NetworkUsageHistoryRow) -> some View {
+        BrandCard {
+            VStack(alignment: .leading, spacing: 14) {
+                BrandSectionHeader(
+                    title: "Network identity",
+                    subtitle: "What Traffic Monitoring knows about this connection without inspecting packet contents.",
+                    icon: "checkmark.shield"
+                )
+
+                HStack(spacing: 10) {
+                    BrandStatusPill(
+                        text: row.connectionKind.rawValue,
+                        icon: row.connectionKind == .wifi ? "wifi" : "network",
+                        tint: BrandTheme.networkBlue
+                    )
+                    BrandStatusPill(
+                        text: analytics.identityQuality(for: row).title,
+                        icon: identityIcon(for: row),
+                        tint: BrandTheme.evidenceColor(for: analytics.identityQuality(for: row))
+                    )
+                    if row.isExpensive {
+                        BrandStatusPill(
+                            text: "Hotspot / expensive",
+                            icon: "iphone.radiowaves.left.and.right",
+                            tint: BrandTheme.signalCyan
+                        )
+                    }
+                    if row.isConstrained {
+                        BrandStatusPill(
+                            text: "Constrained",
+                            icon: "gauge.with.dots.needle.33percent",
+                            tint: BrandTheme.warning
+                        )
+                    }
+                    Spacer()
+                }
+
+                Divider()
+
+                HStack(spacing: 36) {
+                    info("First observed", date(row.firstSeenAt))
+                    info("Last observed", date(row.lastSeenAt))
+                    info("Technical identity", shortIdentity)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func aliasCard(_ row: NetworkUsageHistoryRow) -> some View {
+        BrandCard {
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Friendly name")
+                        .font(.headline)
+                    Text("Use a name such as Home, Office, or iPhone. The underlying network identity remains unchanged.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                TextField("Home, Office, iPhone…", text: $alias)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+
+                Button("Save") { saveAlias() }
+
+                if let saveMessage {
+                    Text(saveMessage)
+                        .font(.caption)
+                        .foregroundStyle(saveMessage.hasPrefix("Could not") ? BrandTheme.critical : BrandTheme.healthy)
+                        .frame(width: 110, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private var trendCard: some View {
+        BrandCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    BrandSectionHeader(
+                        title: "Usage trend",
+                        subtitle: "Traffic attributed to this network across the selected period.",
+                        icon: "chart.xyaxis.line"
+                    )
+                    if let peak {
+                        BrandStatusPill(
+                            text: "Peak \(bytes(peak.totalBytes))",
+                            icon: "bolt.fill",
+                            tint: BrandTheme.signalCyan
+                        )
+                    }
+                }
+
+                if detailPoints.isEmpty {
+                    ContentUnavailableView("No usage in this period", systemImage: "chart.bar")
+                        .frame(minHeight: 250)
+                } else {
+                    Chart {
+                        ForEach(detailPoints) { point in
+                            LineMark(
+                                x: .value("Time", point.intervalStart),
+                                y: .value("Data used", Double(point.totalBytes))
+                            )
+                            .foregroundStyle(BrandTheme.networkBlue)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+
+                            PointMark(
+                                x: .value("Time", point.intervalStart),
+                                y: .value("Data used", Double(point.totalBytes))
+                            )
+                            .foregroundStyle(point.id == peak?.id ? BrandTheme.signalCyan : BrandTheme.networkBlue.opacity(0.5))
+                            .symbolSize(point.id == peak?.id ? 42 : 14)
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                            AxisValueLabel {
+                                if let numeric = value.as(Double.self) {
+                                    Text(bytes(UInt64(max(0, numeric))))
+                                }
+                            }
+                        }
+                    }
+                    .frame(minHeight: 290)
+                }
+            }
+        }
     }
 
     private var row: NetworkUsageHistoryRow? {
@@ -118,6 +248,22 @@ struct NetworkDetailView: View {
         detailPoints.max { $0.totalBytes < $1.totalBytes }
     }
 
+    private var shortIdentity: String {
+        guard identityKey.count > 28 else { return identityKey }
+        return String(identityKey.prefix(25)) + "…"
+    }
+
+    private func info(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+        }
+    }
+
     private func loadAlias() {
         alias = (try? analytics.alias(for: identityKey)) ?? ""
     }
@@ -128,36 +274,16 @@ struct NetworkDetailView: View {
             saveMessage = alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Alias removed" : "Alias saved"
             onChanged()
         } catch {
-            saveMessage = "Could not save: \(error.localizedDescription)"
+            saveMessage = "Could not save"
         }
-    }
-
-    private func metric(_ title: String, _ value: String, _ detail: String?) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .lineLimit(1)
-            if let detail {
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func identityIcon(for row: NetworkUsageHistoryRow) -> String {
         switch analytics.identityQuality(for: row) {
-        case .identified: "checkmark.seal"
-        case .partiallyIdentified: "info.circle"
+        case .identified: "checkmark.seal.fill"
+        case .partiallyIdentified: "info.circle.fill"
         case .unknownNetwork: "wifi.exclamationmark"
-        case .trackingDegraded: "exclamationmark.triangle"
+        case .trackingDegraded: "exclamationmark.triangle.fill"
         }
     }
 
