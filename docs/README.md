@@ -17,6 +17,13 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. `data-and-analytics.md` for persistence/coverage semantics
 4. `evidence-export.md` for JSON/CSV schema work
 
+### Reviewing UX/UI through Phase 4
+
+1. `phase-1-4-implementation-status.md` — compact status of the branded UX overhaul, analytics refinement, Applications cleanup and non-privileged preview.
+2. `ux.md` — authoritative product information architecture.
+3. `non-privileged-app-activity.md` — authoritative App Activity Preview evidence boundary.
+4. `brand.md` — visual identity rules.
+
 ### Reviewing Applications Beta
 
 Applications now has two intentionally separate capability levels:
@@ -94,11 +101,12 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 ### Changing the UI / brand
 
 1. `../AGENTS.md`
-2. `brand.md` for visual identity
-3. `ux.md` for information architecture and capability presentation
-4. `non-privileged-app-activity.md` when changing Applications Preview semantics
-5. `data-and-analytics.md` only for metrics/query semantics
-6. `positioning.md` if user-facing labels change the product claim
+2. `phase-1-4-implementation-status.md` for current implementation state
+3. `brand.md` for visual identity
+4. `ux.md` for information architecture and capability presentation
+5. `non-privileged-app-activity.md` when changing Applications Preview semantics
+6. `data-and-analytics.md` only for metrics/query semantics
+7. `positioning.md` if user-facing labels change the product claim
 
 ### Reviewing current product scope
 
@@ -113,6 +121,7 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 - `positioning.md` — authoritative positioning, ecosystem role, audiences, messaging, claims, and evidence levels.
 - `local-first-observability-plan.md` — detailed phased evolution from network-level analytics toward optional app attribution, locality evidence, audits, and developer tooling.
 - `a0-a2-implementation-status.md` — compact implementation/status view for repository positioning, evidence quality, and export.
+- `phase-1-4-implementation-status.md` — compact current status of UX/UI overhaul through the non-privileged Phase 4 preview.
 - `b0-b2-implementation-status.md` — compact current status of signed Advanced Observability implementation and remaining validation gates.
 - `advanced-observability-feasibility.md` — B0 macOS feasibility result, prototype architecture, signing/distribution and evidence-source constraints.
 - `advanced-observability-signed-runbook.md` — operational preflight, activation, runtime diagnostics, controlled validation and cleanup for the signed B1/B2 prototype.
@@ -142,6 +151,7 @@ When documents overlap:
 - current feature scope → `product-spec.md`;
 - current engineering execution → `implementation-plan.md`;
 - A0–A2 implementation status → `a0-a2-implementation-status.md`;
+- UX/UI Phase 1–4 status → `phase-1-4-implementation-status.md`;
 - signed B0–B2 current status → `b0-b2-implementation-status.md`;
 - non-privileged process preview → `non-privileged-app-activity.md`;
 - B0 platform feasibility → `advanced-observability-feasibility.md`;
