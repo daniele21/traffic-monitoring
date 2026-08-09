@@ -2,13 +2,23 @@
 import SwiftUI
 
 struct BrandCard<Content: View>: View {
-    var padding: CGFloat = 16
-    var accent: Color? = nil
-    @ViewBuilder var content: Content
+    private let paddingAmount: CGFloat
+    private let accent: Color?
+    private let content: Content
+
+    init(
+        padding: CGFloat = 16,
+        accent: Color? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.paddingAmount = padding
+        self.accent = accent
+        self.content = content()
+    }
 
     var body: some View {
         content
-            .padding(padding)
+            .padding(paddingAmount)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
@@ -120,7 +130,11 @@ struct BrandLiveIndicator: View {
 }
 
 struct BrandHeroSurface<Content: View>: View {
-    @ViewBuilder var content: Content
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
 
     var body: some View {
         content
