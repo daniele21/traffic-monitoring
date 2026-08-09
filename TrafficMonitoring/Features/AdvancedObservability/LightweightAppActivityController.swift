@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import Foundation
 
 @MainActor
@@ -17,6 +18,7 @@ final class LightweightAppActivityController: ObservableObject {
     }
 
     private let sampler = NettopProcessSampler()
+    private let applicationAggregator = LightweightApplicationActivityAggregator()
     private var samplingTask: Task<Void, Never>?
 
     init() {
@@ -26,6 +28,10 @@ final class LightweightAppActivityController: ObservableObject {
             isEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
         }
         state = isEnabled ? .available : .disabled
+    }
+
+    var applications: [LightweightApplicationNetworkSummary] {
+        applicationAggregator.aggregate(samples)
     }
 
     var totalDownloadedBytes: UInt64 { saturatingSum(samples.map(\.downloadedBytes)) }
@@ -73,7 +79,7 @@ final class LightweightAppActivityController: ObservableObject {
         guard isEnabled else { return }
         do {
             let rows = try await sampler.sample()
-            samples = rows.filter { $0.totalBytes > 0 }.prefix(100).map { $0 }
+            samples = rows.filter { $0.totalBytes > 0 }
             lastUpdatedAt = Date()
             state = .available
             errorMessage = nil
@@ -146,8 +152,119 @@ private struct NettopProcessSampler: Sendable {
                 throw SamplingError.invalidOutput
             }
 
-            return NettopProcessCSVParser().parse(output, observedAt: Date())
+            let parsed = NettopProcessCSVParser().parse(output, observedAt: Date())
+            let parentProcessIDs = ProcessParentTable.snapshot()
+            let resolver = MacApplicationIdentityResolver(parentProcessIDs: parentProcessIDs)
+
+            return parsed.map { sample in
+                LightweightProcessNetworkSample(
+                    processName: sample.processName,
+                    processIdentifier: sample.processIdentifier,
+                    downloadedBytes: sample.downloadedBytes,
+                    uploadedBytes: sample.uploadedBytes,
+                    observedAt: sample.observedAt,
+                    application: resolver.resolve(
+                        processIdentifier: sample.processIdentifier,
+                        processName: sample.processName
+                    )
+                )
+            }
         }.value
+    }
+}
+
+private struct ProcessParentTable: Sendable {
+    static func snapshot() -> [Int32: Int32] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-axo", "pid=,ppid="]
+
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return [:] }
+        } catch {
+            return [:]
+        }
+
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        guard let text = String(data: data, encoding: .utf8) else { return [:] }
+
+        var result: [Int32: Int32] = [:]
+        for line in text.split(whereSeparator: \.isNewline) {
+            let fields = line.split(whereSeparator: \.isWhitespace)
+            guard fields.count >= 2,
+                  let pid = Int32(fields[0]),
+                  let parentPID = Int32(fields[1]) else {
+                continue
+            }
+            result[pid] = parentPID
+        }
+        return result
+    }
+}
+
+private struct MacApplicationIdentityResolver: Sendable {
+    let parentProcessIDs: [Int32: Int32]
+
+    func resolve(processIdentifier: Int32?, processName: String) -> LightweightApplicationIdentity? {
+        guard var currentPID = processIdentifier, currentPID > 0 else { return nil }
+
+        var visited = Set<Int32>()
+        for _ in 0..<16 {
+            guard visited.insert(currentPID).inserted else { break }
+
+            if let runningApplication = NSRunningApplication(processIdentifier: pid_t(currentPID)),
+               let identity = identity(for: runningApplication) {
+                return identity
+            }
+
+            guard let parentPID = parentProcessIDs[currentPID], parentPID > 1 else { break }
+            currentPID = parentPID
+        }
+
+        return nil
+    }
+
+    private func identity(for runningApplication: NSRunningApplication) -> LightweightApplicationIdentity? {
+        if let sourceURL = runningApplication.bundleURL ?? runningApplication.executableURL,
+           let applicationURL = outermostApplicationURL(containing: sourceURL) {
+            let bundle = Bundle(url: applicationURL)
+            let name = (bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+                ?? (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)
+                ?? applicationURL.deletingPathExtension().lastPathComponent
+            return LightweightApplicationIdentity(
+                name: name,
+                bundleIdentifier: bundle?.bundleIdentifier ?? runningApplication.bundleIdentifier
+            )
+        }
+
+        if let name = runningApplication.localizedName, !name.isEmpty {
+            return LightweightApplicationIdentity(
+                name: name,
+                bundleIdentifier: runningApplication.bundleIdentifier
+            )
+        }
+
+        return nil
+    }
+
+    private func outermostApplicationURL(containing url: URL) -> URL? {
+        let components = url.standardizedFileURL.pathComponents
+        guard components.count > 1 else { return nil }
+
+        var candidate = URL(fileURLWithPath: "/", isDirectory: true)
+        for component in components.dropFirst() {
+            candidate.appendPathComponent(component, isDirectory: true)
+            if component.lowercased().hasSuffix(".app") {
+                return candidate
+            }
+        }
+        return nil
     }
 }
 #endif
