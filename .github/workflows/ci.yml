@@ -31,24 +31,14 @@ jobs:
           bash -n scripts/verify-signed-advanced-observability.sh
           swiftc scripts/advanced-observability-xpc-probe.swift -o "$RUNNER_TEMP/advanced-observability-xpc-probe"
 
-      - name: Probe non-privileged process network tooling
+      - name: Validate non-privileged App Activity Preview source
         run: |
-          set +e
-          echo '--- nettop help ---'
-          /usr/bin/nettop -h 2>&1 | head -120
-          echo '--- nettop one-shot process sample ---'
-          python3 - <<'PY'
-          import subprocess
-          cmd = ['/usr/bin/nettop', '-P', '-L', '1', '-x', '-J', 'bytes_in,bytes_out']
-          try:
-              result = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
-              print('exit=', result.returncode)
-              print((result.stdout or '')[:5000])
-              print((result.stderr or '')[:3000])
-          except Exception as exc:
-              print('probe-error=', repr(exc))
-          PY
-          exit 0
+          set -euo pipefail
+          test -x /usr/bin/nettop
+          output="$(/usr/bin/nettop -n -P -L 1 -x -J bytes_in,bytes_out)"
+          header="$(printf '%s\n' "$output" | head -1 | tr -d '\r')"
+          test "$header" = ",bytes_in,bytes_out,"
+          printf 'nettop process-summary interface available\n'
 
       - name: Xcode build and tests
         run: |
