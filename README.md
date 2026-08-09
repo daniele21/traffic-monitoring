@@ -6,32 +6,31 @@
 
 **Local network observability for macOS.**
 
-Traffic Monitoring helps you understand how your Mac uses the network: **how much data moves, when it moves, and across which network contexts** — while keeping usage analytics on-device.
+Traffic Monitoring helps you understand how your Mac uses the network: **how much data moves, when it moves, across which network contexts, and — in the Applications Beta — which processes show network activity** while keeping analytics on-device.
 
 It started from a practical question: **how much data am I actually using when my Mac connects through my phone hotspot?** It is evolving into the **Evidence & Observability** layer of a broader local-first software ecosystem without sacrificing the usefulness of the lightweight network-usage app.
 
 > Local-first should not only be claimed. Where technically possible, it should be observable and verifiable.
 
-## What works in the core product
+## Current product
 
-Traffic Monitoring currently provides network-level observability using public macOS APIs:
+Traffic Monitoring currently provides:
 
-- continuously measures physical-interface download/upload traffic;
-- attributes usage to Wi-Fi, Personal Hotspot, Ethernet, and other supported physical network contexts;
-- reads Darwin 64-bit interface counters;
-- enriches Wi-Fi usage with SSID identity when macOS permission allows it;
-- records `isExpensive` / `isConstrained` path metadata;
-- excludes common virtual/tunnel interfaces from physical-traffic accounting to avoid obvious VPN double counting;
-- persists historical usage locally with SwiftData;
-- uses efficient 5-minute usage/coverage buckets with ~15-second checkpoints;
-- shows Overview, Trend, Networks, network detail, and a separate technical Monitor;
-- supports Today / 7 days / 30 days / This month / All time / Custom ranges;
-- reports **evidence quality and observation coverage** instead of pretending every selected minute was observed;
-- keeps unknown Wi-Fi identity explicit when SSID is unavailable;
-- supports friendly network aliases without rewriting canonical identity;
-- previews and exports versioned **JSON / CSV network evidence** only when the user asks;
-- runs as a native SwiftUI menu-bar utility;
-- is built, tested, Release-packaged, and made downloadable by GitHub Actions.
+- continuous physical-interface download/upload measurement;
+- Wi-Fi, Personal Hotspot, Ethernet, and supported physical network-context attribution;
+- Darwin 64-bit interface counters;
+- Wi-Fi SSID enrichment when macOS permission allows it;
+- `isExpensive` / `isConstrained` path metadata;
+- local SwiftData history with efficient 5-minute usage/coverage buckets and ~15-second checkpoints;
+- branded native macOS navigation: **Overview, Trends, Networks, Applications Beta, Monitor**;
+- Today / 7 days / 30 days / This month / All time / Custom ranges;
+- evidence quality and observation coverage;
+- explicit unknown Wi-Fi identity;
+- friendly network aliases and network detail;
+- versioned JSON / CSV **network evidence** export;
+- a best-effort **App Activity Preview** that works without an Apple Developer Program;
+- an optional signed **Advanced Provider** prototype for future richer app/locality evidence;
+- GitHub Actions build, tests, Release packaging, and downloadable macOS artifact.
 
 Core Analytics answers questions such as:
 
@@ -39,7 +38,6 @@ Core Analytics answers questions such as:
 - Which detected network accounted for the most usage?
 - How much was downloaded vs uploaded?
 - When did usage peak?
-- How much traffic was observed on a likely expensive/hotspot path?
 - How much of the selected period was actually observed?
 - Was some traffic measured with incomplete network identity?
 
@@ -64,7 +62,7 @@ Core evidence states:
 
 Sleep, app shutdown, crashes, and long observation gaps are not silently filled in as monitored time.
 
-Use **About this data** in Analytics to inspect selected time, observed time, healthy observation, gaps, and measurement limitations.
+Use **About data** in Analytics to inspect selected time, observed time, gaps, and measurement limitations.
 
 ## Reproducible network evidence export
 
@@ -75,15 +73,34 @@ The selected Analytics period can be previewed and saved as:
 
 Exports include aggregate totals, coverage, evidence quality, network identity/display name, connection kind, download/upload/total, expensive/constrained flags, app/schema versions, and observation timestamps.
 
-They deliberately exclude packet payloads, browsing content, destinations, DNS history, BSSID, and process/application identity.
+They deliberately exclude packet payloads, browsing content, destinations, DNS history, BSSID, and application/process identity.
 
 See [`docs/evidence-export.md`](docs/evidence-export.md).
 
-## Advanced Observability — experimental
+## Applications Beta
 
-The branch also contains an **opt-in B0/B1/B2 prototype** for app-level network evidence. This is intentionally separate from the core tracker.
+Applications has **two deliberately separate capability levels**.
 
-Prototype architecture:
+### App Activity Preview — works without Apple Developer Program
+
+Traffic Monitoring can sample the local macOS process network summary and show best-effort:
+
+- process name;
+- PID when available;
+- downloaded bytes;
+- uploaded bytes;
+- total bytes;
+- latest preview refresh.
+
+This uses the local macOS `nettop` process-summary interface and does **not** require a Network Extension, system-extension installation, Developer ID, or Apple Developer Program membership.
+
+The preview is intentionally labeled **activity preview, not privacy evidence**. It cannot determine whether traffic was loopback, LAN, or Internet, its cumulative process totals can include activity from before Traffic Monitoring opened, and it is not persisted or included in evidence export.
+
+See [`docs/non-privileged-app-activity.md`](docs/non-privileged-app-activity.md).
+
+### Advanced Provider — experimental signed path
+
+The repository also contains the B0/B1/B2 prototype for richer application-flow evidence:
 
 ```text
 Traffic Monitoring.app
@@ -99,56 +116,39 @@ Embedded Network Extension system extension
         └── in-memory per-app aggregation
 ```
 
-Implemented prototype surfaces:
+Implemented source/build surfaces include:
 
 - embedded macOS `NEFilterDataProvider` system-extension target;
-- source application path based on `sourceAppAuditToken` with `Unknown application` fallback;
-- deterministic locality classification with explicit `unknown`;
-- low-frequency `NEFilterReport` byte accounting, currently marked **Not validated**;
-- provider → app Mach/XPC aggregate-evidence bridge;
-- opt-in **Applications** view with Disabled / Provider unavailable / Awaiting approval / Active / Degraded states;
-- per-application Local / External / Unknown evidence and detail view;
-- Settings lifecycle to request system-extension activation, surface macOS approval, configure `NEFilterManager`, and disable the filter;
-- no fake application rows when the provider is unavailable.
+- source application identity with `Unknown application` fallback;
+- deterministic Local / External / Unknown classification;
+- low-frequency flow byte accounting, currently **Not validated**;
+- authenticated provider → app Mach/XPC aggregate bridge;
+- provider lifecycle, macOS approval/configuration states and runtime diagnostics;
+- Applications provider table/detail when signed evidence exists.
 
-All source/build/package gates pass in CI, including the embedded system-extension bundle. That is **not** equivalent to signed runtime validation.
+All source/build/package gates pass in CI, but that is **not** equivalent to signed runtime validation.
 
-### Why the downloadable development build may show `Provider unavailable`
+In the normal ad-hoc downloadable build, the UI detects that Apple's system-extension install entitlement is absent and presents the Advanced Provider as **Signed build required** rather than showing an expected entitlement absence as a broken feature.
 
-The GitHub Actions `.app` is ad-hoc signed for local core testing. macOS system-extension activation additionally checks Apple entitlements, provisioning/signing, app location, and user approval.
-
-Therefore the development artifact remains fully usable for core Analytics while honestly reporting Advanced Observability as unavailable when the provider cannot be activated.
-
-### Content-filter warning
-
-macOS allows one enabled Network Extension content-filter configuration at a time. Enabling this experimental mode can disable another active content filter.
-
-Traffic Monitoring therefore:
-
-- never enables Advanced Observability silently;
-- asks for explicit confirmation;
-- keeps core Analytics independent;
-- lets the user disable the filter separately.
-
-This coexistence constraint is still part of the production go/no-go decision.
+macOS also allows one enabled Network Extension content-filter configuration at a time. The signed provider therefore never enables silently and keeps core analytics/App Activity Preview independent.
 
 See:
 
 - [`docs/b0-b2-implementation-status.md`](docs/b0-b2-implementation-status.md)
 - [`docs/advanced-observability-feasibility.md`](docs/advanced-observability-feasibility.md)
-- [`docs/adr/0001-advanced-observability-content-filter.md`](docs/adr/0001-advanced-observability-content-filter.md)
+- [`docs/advanced-observability-signed-runbook.md`](docs/advanced-observability-signed-runbook.md)
 
 ## What Traffic Monitoring does **not** claim
 
-The validated core tracker measures **physical-interface network usage**. It does not by itself establish:
+The validated core tracker measures **physical-interface network usage**. App Activity Preview adds best-effort process totals, but neither by itself establishes:
 
-- which application generated traffic;
-- whether every byte stayed on the LAN or reached the public Internet;
+- whether every process byte stayed on the LAN or reached the public Internet;
 - which remote destination received traffic;
-- that another application is “private” or “local-only”;
+- complete per-app coverage;
+- that an application is `local-only` or privacy-verified;
 - exact ISP/mobile-carrier billing usage.
 
-The Advanced Observability prototype must not be used to make stronger claims until signed real-Mac tests validate source-app identity, locality, byte accounting, XPC coverage/security, helper/VPN behavior, and performance.
+The signed Advanced Provider must not be used for stronger claims until real-Mac tests validate source-app identity, locality, byte accounting, XPC security/coverage, helper/VPN behavior, and performance.
 
 Safe wording remains observational: measured evidence + known coverage + explicit unknowns.
 
@@ -179,49 +179,49 @@ Its contribution is the network side of a broader principle:
 
 ### Local by default
 
-Core usage history and evidence coverage stay on the Mac. No account, analytics backend, or remote telemetry is required. Export is user-initiated.
+Core usage history and evidence coverage stay on the Mac. No account, analytics backend, or remote telemetry is required. Export is user-initiated. App Activity Preview is sampled locally and retained only in memory.
 
 ### Observe, don't inspect
 
-The product is designed around metadata/aggregates, not packet-content retention. Advanced provider IPC carries aggregate evidence, not raw payloads or raw audit tokens.
+The product is designed around metadata/aggregates, not packet-content retention. The preview uses process summaries; the signed provider IPC carries aggregate evidence, not raw payloads or raw audit tokens.
 
 ### Unknown is valid
 
-Never turn incomplete evidence into a definitive result. `Unknown network`, `Unknown application`, `unknown` locality, degraded coverage, and `Not validated` byte accounting are first-class states.
+Never turn incomplete evidence into a definitive result. `Unknown network`, `Unknown application`, unknown locality, degraded coverage, and `Not validated` byte accounting are first-class states.
 
 ### Useful without advanced privileges
 
-Hotspot/network analytics remain fully useful when the system extension is absent, disabled, unapproved, or rejected by the future product go/no-go decision.
+Overview, Trends, Networks, Monitor, history/export, hotspot analytics, and App Activity Preview remain useful when the signed system extension is absent, disabled, unapproved, or never shipped.
 
 ## Architecture
 
 ```text
                          Traffic Monitoring.app
                                   │
-           ┌──────────────────────┴──────────────────────┐
-           │                                             │
-           ▼                                             ▼
-   Core network usage                         Advanced Observability
-   ------------------                         ----------------------
-   64-bit interface counters                  optional system extension
-   CoreWLAN / SSID                            audit-token app identity
-   NWPath metadata                            flow locality
-           │                                  flow statistics
-           ▼                                             │
-   attributed deltas                                    XPC
-           │                                             │
-           ▼                                             ▼
-   5-minute usage + coverage                    Applications UI
-   ~15 s checkpoints                            experimental evidence
-           │
-           ▼
+          ┌───────────────────────┼─────────────────────────┐
+          │                       │                         │
+          ▼                       ▼                         ▼
+   Core network usage      App Activity Preview       Advanced Provider
+   ------------------      --------------------       -----------------
+   64-bit counters         local nettop summary       optional system extension
+   CoreWLAN / SSID         process / PID              audit-token app identity
+   NWPath metadata         cumulative bytes           flow locality/statistics
+          │                       │                         │
+          ▼                       ▼                         ▼
+   attributed deltas       live Applications UI          authenticated XPC
+          │                 (not evidence export)             │
+          ▼                                                 ▼
+   5-minute usage + coverage                         signed provider evidence
+   ~15 s checkpoints                                  (experimental)
+          │
+          ▼
    SwiftData local history
-           │
-     ┌─────┼──────────┐
-     ▼     ▼          ▼
- Overview Trend    Networks / detail
-     │
- JSON / CSV export
+          │
+     ┌────┼──────────┐
+     ▼    ▼          ▼
+ Overview Trends   Networks / detail
+          │
+      JSON / CSV export
 ```
 
 ## Run without installing Xcode
@@ -260,7 +260,9 @@ Start small:
 - [`docs/README.md`](docs/README.md) — documentation map
 - [`docs/product-spec.md`](docs/product-spec.md) — core product contract
 - [`docs/brand.md`](docs/brand.md) — visual system
+- [`docs/ux.md`](docs/ux.md) — product information architecture
+- [`docs/non-privileged-app-activity.md`](docs/non-privileged-app-activity.md) — no-entitlement process preview boundary
 - [`docs/a0-a2-implementation-status.md`](docs/a0-a2-implementation-status.md) — evidence/export status
-- [`docs/b0-b2-implementation-status.md`](docs/b0-b2-implementation-status.md) — Advanced Observability status
+- [`docs/b0-b2-implementation-status.md`](docs/b0-b2-implementation-status.md) — signed Advanced Provider status
 
-CI proves deterministic semantics, buildability, Release packaging, and system-extension embedding. Real-Mac validation remains mandatory for network reliability and Advanced Observability runtime evidence.
+CI proves deterministic semantics, buildability, the non-privileged `nettop` source contract, Release packaging, and system-extension embedding. Real-Mac validation remains mandatory for network reliability and signed Advanced Provider runtime evidence.
