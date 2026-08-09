@@ -20,7 +20,8 @@ struct TrafficMonitoringApp: App {
             DashboardView(
                 diagnostics: model.diagnostics,
                 usageStore: model.usageStore,
-                advancedObservability: model.advancedObservability
+                advancedObservability: model.advancedObservability,
+                lightweightAppActivity: model.lightweightAppActivity
             )
             .task { model.start() }
             .tint(BrandTheme.networkBlue)
@@ -31,7 +32,8 @@ struct TrafficMonitoringApp: App {
             SettingsView(
                 locationAuthorization: model.locationAuthorization,
                 advancedObservability: model.advancedObservability,
-                advancedObservabilityInstaller: model.advancedObservabilityInstaller
+                advancedObservabilityInstaller: model.advancedObservabilityInstaller,
+                lightweightAppActivity: model.lightweightAppActivity
             )
             .tint(BrandTheme.networkBlue)
         }
