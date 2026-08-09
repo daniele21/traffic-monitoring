@@ -17,6 +17,17 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. `data-and-analytics.md` for persistence/coverage semantics
 4. `evidence-export.md` for JSON/CSV schema work
 
+### Reviewing Applications Beta
+
+Applications now has two intentionally separate capability levels:
+
+1. `non-privileged-app-activity.md` — App Activity Preview using the local macOS process summary; no Apple Developer Program required and no locality/privacy claim.
+2. `b0-b2-implementation-status.md` — signed Advanced Provider implementation and remaining runtime gates.
+3. `advanced-observability-feasibility.md` — macOS platform/entitlement architecture for the signed provider only.
+4. `testing.md` — acceptance matrix before Advanced Provider evidence becomes authoritative.
+
+Never use App Activity Preview rows to fill Advanced Provider gaps or to support `local-only` / privacy claims.
+
 ### Reviewing B0–B2 Advanced Observability
 
 1. `b0-b2-implementation-status.md`
@@ -24,7 +35,7 @@ The documentation is organized for progressive disclosure: start with the smalle
 3. `adr/0001-advanced-observability-content-filter.md` only when revisiting the architecture decision
 4. `local-first-observability-plan.md` for the broader roadmap
 
-B0 is **GO for a signed real-Mac prototype**, not production acceptance. The provider → app XPC path, client code-signature authentication, audit-token identity path, locality classification, statistics aggregation, runtime diagnostics and Applications UI compile in CI. No agent may present per-app evidence as release-validated until signed activation, controlled-transfer reconciliation, coverage and performance gates pass.
+B0 is **GO for a signed real-Mac prototype**, not production acceptance. The provider → app XPC path, client code-signature authentication, audit-token identity path, locality classification, statistics aggregation, runtime diagnostics and Applications UI compile in CI. No agent may present per-app Advanced Provider evidence as release-validated until signed activation, controlled-transfer reconciliation, coverage and performance gates pass.
 
 ### Running the app without Xcode
 
@@ -48,10 +59,11 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 ### Planning advanced observability
 
 1. `../AGENTS.md`
-2. `b0-b2-implementation-status.md`
-3. `advanced-observability-feasibility.md`
-4. `positioning.md` only if claims are changing
-5. `local-first-observability-plan.md` only for the broader staged roadmap
+2. `non-privileged-app-activity.md` if changing the no-entitlement preview
+3. `b0-b2-implementation-status.md` if changing the signed provider
+4. `advanced-observability-feasibility.md`
+5. `positioning.md` only if claims are changing
+6. `local-first-observability-plan.md` only for the broader staged roadmap
 
 ### Changing evidence quality / coverage
 
@@ -83,9 +95,10 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 
 1. `../AGENTS.md`
 2. `brand.md` for visual identity
-3. `ux.md` for information architecture
-4. `data-and-analytics.md` only for metrics/query semantics
-5. `positioning.md` if user-facing labels change the product claim
+3. `ux.md` for information architecture and capability presentation
+4. `non-privileged-app-activity.md` when changing Applications Preview semantics
+5. `data-and-analytics.md` only for metrics/query semantics
+6. `positioning.md` if user-facing labels change the product claim
 
 ### Reviewing current product scope
 
@@ -100,9 +113,10 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 - `positioning.md` — authoritative positioning, ecosystem role, audiences, messaging, claims, and evidence levels.
 - `local-first-observability-plan.md` — detailed phased evolution from network-level analytics toward optional app attribution, locality evidence, audits, and developer tooling.
 - `a0-a2-implementation-status.md` — compact implementation/status view for repository positioning, evidence quality, and export.
-- `b0-b2-implementation-status.md` — compact current status of Advanced Observability implementation and remaining validation gates.
+- `b0-b2-implementation-status.md` — compact current status of signed Advanced Observability implementation and remaining validation gates.
 - `advanced-observability-feasibility.md` — B0 macOS feasibility result, prototype architecture, signing/distribution and evidence-source constraints.
 - `advanced-observability-signed-runbook.md` — operational preflight, activation, runtime diagnostics, controlled validation and cleanup for the signed B1/B2 prototype.
+- `non-privileged-app-activity.md` — Phase 4 best-effort process activity preview, source contract, privacy boundary and acceptance criteria.
 - `adr/0001-advanced-observability-content-filter.md` — accepted architecture for signed prototype validation; production acceptance remains gated.
 - `brand.md` — approved visual identity, palette, typography, product language, and chart styling.
 
@@ -115,7 +129,7 @@ B0 is **GO for a signed real-Mac prototype**, not production acceptance. The pro
 - `run-without-xcode.md` — download and launch the CI-built `.app` on a Mac without full Xcode.
 - `data-and-analytics.md` — SwiftData entities, buckets, evidence coverage, local persistence, and analytics queries.
 - `evidence-export.md` — versioned JSON/CSV network-evidence export contract and privacy boundary.
-- `ux.md` — menu-bar and dashboard information architecture.
+- `ux.md` — sidebar, analytics, Applications Beta, menu-bar and Settings information architecture.
 - `implementation-plan.md` — current lightweight product delivery plan with acceptance gates.
 - `testing.md` — unit/integration/manual validation strategy, including the signed B1/B2 matrix.
 - `decisions.md` — compact architectural decision log.
@@ -128,13 +142,15 @@ When documents overlap:
 - current feature scope → `product-spec.md`;
 - current engineering execution → `implementation-plan.md`;
 - A0–A2 implementation status → `a0-a2-implementation-status.md`;
-- B0–B2 current status → `b0-b2-implementation-status.md`;
+- signed B0–B2 current status → `b0-b2-implementation-status.md`;
+- non-privileged process preview → `non-privileged-app-activity.md`;
 - B0 platform feasibility → `advanced-observability-feasibility.md`;
 - signed B1/B2 operational procedure → `advanced-observability-signed-runbook.md`;
 - B1/B2 acceptance matrix → `testing.md`;
 - export schema → `evidence-export.md`;
 - future app/locality/audit evolution → `local-first-observability-plan.md`;
 - visual identity → `brand.md`;
+- product information architecture → `ux.md`;
 - technical behavior → the focused architecture/tracking/data document.
 
 ## Documentation rule
