@@ -31,41 +31,41 @@ The app parses the CSV locally and refreshes the preview approximately every 15 
 
 No preview sampling is required for core network tracking.
 
-## Application aggregation
+## Three activity views
 
-The primary preview is application-level rather than PID-level.
+Applications Beta presents the same latest macOS sample at three aggregation levels.
 
-For each sampled PID, Traffic Monitoring performs a best-effort macOS application identity resolution. It checks the running process and, when needed, walks the local parent-process chain to find an owning application bundle. Nested helper bundles are normalized to the outer application bundle when possible, so helpers such as browser helpers or language servers can be grouped with the application that owns them.
+### Applications
 
-When an application bundle is resolved, aggregation uses its bundle identifier when available and sums all matching process rows into one application row. The row exposes:
+For each sampled PID, Traffic Monitoring performs a best-effort macOS application identity resolution. It checks the running process and, when needed, walks the local parent-process chain to find an owning application bundle. Nested helper bundles are normalized to the outer application bundle when possible.
 
-- application display name;
-- bundle identifier when available;
-- number of contributing process rows;
-- downloaded bytes;
-- uploaded bytes;
-- total bytes.
+When an application bundle is resolved, aggregation uses its bundle identifier when available and sums all matching process rows into one application row. If ownership cannot be resolved, Traffic Monitoring does not invent one.
 
-If macOS cannot resolve an owning application, Traffic Monitoring does not invent one. The row falls back to a best-effort process-name group and is labeled accordingly in the UI.
+### Process names
 
-A segmented **Applications / Processes** control keeps the raw process/PID view available for diagnostics. Searching applications also matches bundle identifiers and contributing process names.
+All rows with the same process name are combined across PIDs into one ranked process-name summary. This answers questions such as how much aggregate activity came from all `language_server`, `Electron`, or helper instances in the latest sample.
 
-## What the preview may show
+Each summary exposes:
 
-For processes present in the latest sample:
-
-- owning application when resolvable;
-- application bundle identifier when resolvable;
 - process name;
-- PID when parseable;
-- downloaded bytes reported by `nettop`;
-- uploaded bytes reported by `nettop`;
-- total bytes;
-- latest preview refresh time.
+- number of PID instances;
+- represented application names when available;
+- summed downloaded bytes;
+- summed uploaded bytes;
+- summed total bytes;
+- percentage share of all visible process bytes in the latest sample.
 
-Rows are best-effort activity hints. They are not persisted in SwiftData in this phase.
+Process-name aggregation is independent from application aggregation. The same process name can legitimately occur under more than one application; represented application names stay explicit rather than being forced into a single owner.
+
+### Processes
+
+The diagnostic view retains individual process/PID rows together with resolved application identity when available.
+
+This is useful for checking how an application-level or process-name aggregate was composed.
 
 ## Evidence boundary
+
+All three views are **latest-sample activity analytics**, not durable historical evidence.
 
 The preview **cannot** currently establish:
 
@@ -101,9 +101,9 @@ Traffic Monitoring does not add DNS lookups, packet payload inspection, browsing
 - Disabling the preview clears current preview rows.
 - Missing/unusable `nettop` becomes an explicit unavailable/failed state rather than fake rows.
 - Sampling and app-identity resolution execute off the main actor/thread; UI publication remains on the main actor.
-- Application totals aggregate all non-zero process rows retained from the latest sample.
+- Applications, Process names, and Processes are derived from the same in-memory sample and therefore reconcile to the same visible total.
 - The diagnostic process table renders at most the first 200 matching rows to keep the UI responsive.
-- Application/process search and filtering are local and do not change the sampled source.
+- Search and filtering are local and do not change the sampled source.
 
 ## Relationship to the signed provider
 
@@ -111,9 +111,10 @@ Traffic Monitoring does not add DNS lookups, packet payload inspection, browsing
 Applications Beta
 ├── App Activity Preview
 │   ├── no Apple Developer Program required
-│   ├── application aggregate when resolvable
-│   ├── process name / PID diagnostics
-│   ├── process byte totals
+│   ├── application aggregation
+│   ├── process-name aggregation
+│   ├── process / PID diagnostics
+│   ├── cumulative process byte totals
 │   └── no locality / privacy conclusion
 │
 └── Advanced Provider
@@ -136,6 +137,9 @@ Phase 4 source/build acceptance requires:
 - quoted CSV fields are supported;
 - application aggregation sums multiple process rows without overflow;
 - unresolved process identity remains explicit instead of fabricating a bundle identifier;
+- process-name aggregation combines matching names across PIDs using saturating byte arithmetic;
+- process-name aggregation may span multiple applications and keeps represented app names explicit;
+- all aggregation levels reconcile to the same latest-sample byte totals;
 - zero-byte rows may be omitted from UI without changing the raw parser contract;
 - sampling occurs off the main thread;
 - the Applications UI states that preview data is best effort and non-authoritative;
