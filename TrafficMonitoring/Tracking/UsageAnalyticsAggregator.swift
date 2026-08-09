@@ -33,6 +33,7 @@ public struct UsageAnalyticsAggregator: Sendable {
                 existing.firstSeenAt = min(existing.firstSeenAt, bucket.startedAt)
                 existing.lastSeenAt = max(existing.lastSeenAt, bucket.lastObservedAt)
                 existing.isExpensive = existing.isExpensive || bucket.isExpensive
+                existing.isConstrained = existing.isConstrained || bucket.isConstrained
                 rows[bucket.identityKey] = existing
             } else {
                 rows[bucket.identityKey] = NetworkUsageHistoryRow(
@@ -43,7 +44,8 @@ public struct UsageAnalyticsAggregator: Sendable {
                     uploadedBytes: bucket.uploadedBytes,
                     firstSeenAt: bucket.startedAt,
                     lastSeenAt: bucket.lastObservedAt,
-                    isExpensive: bucket.isExpensive
+                    isExpensive: bucket.isExpensive,
+                    isConstrained: bucket.isConstrained
                 )
             }
         }

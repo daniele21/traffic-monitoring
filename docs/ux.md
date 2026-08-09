@@ -1,414 +1,352 @@
 # UX and information architecture
 
-This document defines the v1 menu-bar and analytics experience. It does not define counter semantics; see `tracking-engine.md` and `data-and-analytics.md`.
+This document defines the current product-facing macOS experience. Counter semantics belong in `tracking-engine.md`; persistence/evidence semantics belong in `data-and-analytics.md`; the non-privileged process preview boundary belongs in `non-privileged-app-activity.md`.
 
-## UX principles
+## Experience goals
 
-- Glanceable first, detailed on demand.
-- Make the current network obvious.
-- Keep live-rate wording distinct from cumulative-usage wording.
-- Use direct labels that answer a user question without requiring networking knowledge.
-- Never imply packet inspection or exact carrier billing.
-- Permission failures should degrade gracefully instead of blocking the app.
-- Optimize for a utility that can remain open for months without demanding attention.
+Traffic Monitoring should feel like a polished analytics product rather than a technical prototype.
 
-## App structure
+Principles:
 
-```text
-Menu bar
-  ├─ Connected now
-  ├─ Download now / Upload now
-  ├─ Used since opening
-  ├─ Open Analytics
-  ├─ Settings
-  └─ Quit
+- glanceable first, detailed on demand;
+- make the current network and selected period obvious;
+- separate live rate from accumulated volume;
+- use direct labels that do not require networking knowledge;
+- keep the approved shield identity visible but restrained;
+- use flat/native macOS surfaces even though the logo is dimensional;
+- keep capability limits visible instead of turning unavailable features into mysterious errors;
+- never imply packet inspection, exact carrier billing, complete app coverage, or a privacy verdict without matching evidence;
+- optimize for a utility that can remain open for months without demanding attention.
 
-Analytics window
-  ├─ Analytics
-  │   ├─ Overview
-  │   ├─ Trend
-  │   └─ Networks
-  └─ Monitor
-      └─ Technical interface diagnostics
-
-Settings
-  ├─ General
-  ├─ Privacy / Wi-Fi identification
-  └─ Data
-```
-
-The technical counter table belongs under **Monitor**, not in the default analytics view.
-
-## Copy hierarchy
-
-Use wording that clearly separates instantaneous speed from accumulated volume.
-
-### Live values
-
-Preferred:
-
-- `Connected now`
-- `Download now`
-- `Upload now`
-
-These values are rates and should include `/s`.
-
-### Accumulated values
-
-Preferred:
-
-- `Total used`
-- `Downloaded`
-- `Uploaded`
-- `Used since opening`
-- `Usage by network`
-- `Networks used`
-
-These values are transferred volume and must not include `/s`.
-
-Do not expose `Raw`, `Delta`, interface names, counter semantics, or similar implementation language in the default analytics experience. Those terms are allowed only in **Monitor**.
-
-## Menu-bar item
-
-Default label should remain compact.
-
-Possible default:
+## Main information architecture
 
 ```text
-↓ 2.3 MB/s
+Traffic Monitoring
+├── Overview
+├── Trends
+├── Networks
+├── Applications   [Beta]
+└── Monitor
 ```
 
-or, if screen space is limited:
+The main window uses a native macOS sidebar. Analytics/evidence content is shown in the detail column.
 
-```text
-↕ 2.5 MB/s
-```
+`Monitor` is the only place where interface-level implementation detail belongs.
 
-Provide a setting to show:
+### Sidebar footer
 
-- icon only;
-- total current rate;
-- download rate;
-- current session usage.
+Keep a small persistent status surface showing:
 
-Do not put multiple changing values into the menu-bar title by default.
+- current network;
+- current download rate;
+- current upload rate;
+- Settings shortcut.
 
-## Menu-bar popover
+Do not turn the sidebar into a second dashboard.
 
-Current hierarchy:
+## Brand application
 
-```text
-Connected now
-Home Wi-Fi
+Use the brand kit as follows:
 
-Download now       2.3 MB/s
-Upload now         180 kB/s
-Used since opening 1.42 GB
+- Midnight / Deep Navy → identity/hero framing and dark contrast;
+- Royal / Network Blue → primary selected state and principal analytics series;
+- Signal Cyan → live state, hotspot emphasis and meaningful peaks;
+- semantic green/amber/red → status only;
+- shield logo → app icon, menu-bar identity, selected identity/empty-state surfaces; do not repeat it in every card.
 
-[ Open Analytics ]
+Product surfaces use rounded, flat cards with subtle borders/shadows and native macOS spacing. Do not reproduce the logo's bevel/gloss throughout the UI.
 
-Settings…
-Quit
-```
+Reusable product components live under `TrafficMonitoring/Brand/`.
 
-Period totals remain primarily in Analytics until the persistence UX is validated on real networks.
+## Overview
 
-When `isExpensive == true`, add a restrained metadata badge such as `Likely hotspot`; do not make an absolute carrier claim.
+Overview should answer immediately:
 
-When SSID is unavailable:
+- how much data was used in the selected period?
+- what network is active now?
+- how much was download vs upload?
+- what was the selected period's peak?
+- how much of the period was actually observed?
+- what is the current evidence quality?
+- which networks contributed the most?
+- is history being saved locally?
 
-```text
-Wi-Fi network
-Name unavailable
-```
+### Hero
 
-with a secondary action such as `Enable Wi-Fi identification…` if Location permission can be requested/opened.
+The branded hero contains:
 
-## Dashboard analytics
+- selected period;
+- `Total network usage`;
+- current network;
+- live download/upload rates.
 
-### Header
-
-- title: `Network Usage`;
-- default section: `Analytics`;
-- secondary section: `Monitor`.
-
-Inside Analytics, use three user-facing views:
-
-- `Overview` — cumulative totals and the most-used networks;
-- `Trend` — usage over time, network filtering, and peak periods;
-- `Networks` — full comparison table across detected networks.
-
-The time-period selector is shared across analytics views:
-
-- `Today`
-- `7 days`
-- `30 days`
-- `This month`
-- `All time`
-- `Custom`
-
-`Custom` exposes direct `From` and `To` date controls.
+Live values always include `/s`; period totals never do.
 
 ### Summary cards
 
-Four clear values are allowed when useful:
+Current preferred cards:
 
-- `Total used`;
 - `Downloaded`;
 - `Uploaded`;
-- `Networks used`.
+- `Highest usage hour` / `Highest usage day`;
+- `Observed`.
 
-In Trend, replace `Networks used` with the selected period's peak metric when useful:
+Evidence quality appears as a dedicated status surface rather than being hidden inside About Data.
 
-- `Highest usage hour` for Today;
-- `Highest usage day` for longer periods.
+## Trends
 
-### Overview
+Trends provides:
 
-Overview should answer, without interaction:
+- shared period selector;
+- `All networks` or one selected network;
+- total/download/upload cards;
+- selected-period peak;
+- line chart using the brand network blue;
+- Signal Cyan peak marker;
+- largest network spike callout;
+- evidence-quality status.
 
-- how much data was used in the selected period?
-- how much was download vs upload?
-- how many networks contributed?
-- which networks consumed the most?
-- is history actually being saved locally?
+Today aggregates hourly; longer periods aggregate daily.
 
-Current supporting labels include:
+The chart represents transferred volume in each interval, not instantaneous throughput.
 
-- `Most used networks`
-- `Saved locally`
+## Networks
 
-The local-storage status is intentionally visible while persistence is still being validated so a storage failure cannot silently look like durable history.
+Networks uses readable cards rather than a dense technical table as the primary presentation.
 
-### Usage trend
+Each card can show:
 
-Use Swift Charts backed by persisted usage buckets.
+- friendly display name;
+- connection type;
+- identity quality;
+- hotspot/expensive badge when supported by macOS metadata;
+- constrained badge when supported;
+- total/download/upload;
+- share of selected-period usage;
+- last activity;
+- Details action.
 
-The current chart uses transferred-volume bars rather than a throughput line. This keeps the meaning clear: bar height represents data used in that hour/day, not instantaneous network speed.
+### Network detail
 
-Trend supports:
+The detail sheet contains:
 
-- all networks together;
-- one selected network;
-- hourly points for Today;
-- daily points for longer periods;
-- a visible peak marker;
-- a `Largest network spike` callout identifying the network responsible for the largest individual network/time interval.
+- total/download/upload/peak cards;
+- identity quality and connection metadata;
+- first/last observed timestamps;
+- underlying technical identity;
+- editable friendly alias;
+- network-specific usage trend.
 
-When all networks are shown, keep each network visually distinguishable and provide a legend.
+Aliases never mutate the technical network identity.
 
-Preferred peak copy:
+## Applications Beta
+
+Applications intentionally presents two separate capability levels.
+
+### 1. App Activity Preview
+
+Available without Apple Developer Program or a privileged system component.
+
+Shows best-effort process-level network totals while Applications is visible:
+
+- process name;
+- PID when available;
+- downloaded;
+- uploaded;
+- total;
+- latest refresh.
+
+The UI must always say that this is an **activity preview, not privacy evidence**.
+
+It must also explain that preview totals:
+
+- can include activity from before Traffic Monitoring opened;
+- do not distinguish loopback/LAN/Internet;
+- are not persisted;
+- are not included in evidence export;
+- cannot prove an application is local-only.
+
+See `non-privileged-app-activity.md` for the authoritative boundary.
+
+### 2. Advanced Provider
+
+The richer signed system-extension path remains visually separate.
+
+When unavailable in an ad-hoc build, use product language such as:
+
+> Signed provider not available in this build.
+
+Do not show a large red setup failure for an entitlement that is intentionally absent.
+
+When available, expose:
+
+- provider state;
+- Local / External / Unknown flows;
+- byte-accounting capability;
+- provider runtime diagnostics;
+- application detail.
+
+Unknown evidence remains Unknown. Byte totals stay non-authoritative until the B1 real-Mac reconciliation gate passes.
+
+## Monitor
+
+Monitor is explicitly a technical measurement view.
+
+Above the technical table show:
+
+- current network;
+- download now;
+- upload now;
+- a concise explanation that interface totals and last-sample changes are not the same as usage attributed to a network.
+
+Technical interface names, raw counters, and sampling deltas are allowed here but should not leak into Overview/Trends/Networks.
+
+Preferred eventual technical labels are descriptive rather than shorthand, for example:
+
+- `Interface total ↓`;
+- `Interface total ↑`;
+- `Last sample ↓`;
+- `Last sample ↑`.
+
+## Shared period controls
+
+Analytics uses:
+
+- Today;
+- 7 days;
+- 30 days;
+- This month;
+- All time;
+- Custom.
+
+Custom exposes direct From/To dates.
+
+`About data` and `Export` remain visible shared actions because evidence quality and reproducibility are part of the product positioning.
+
+## Menu-bar experience
+
+The menu-bar item remains compact and monochrome/native.
+
+The popover is branded but restrained:
 
 ```text
-Highest usage hour
-3.4 GB
-8 Aug, 14:00
+Traffic Monitoring
+Current network
+
+Download     2.3 MB/s
+Upload       180 kB/s
+
+Used since opening
+1.42 GB
+
+Open Traffic Monitoring
+Settings
+Quit
 ```
 
-or:
-
-```text
-Highest usage day
-18.2 GB
-8 Aug 2026
-```
-
-### Usage by network
-
-Rank descending by total bytes.
-
-Columns/row content:
-
-```text
-Network            Connection   Downloaded   Uploaded   Total used   Share   Last active
-Home               Wi-Fi        12.1 GB      1.9 GB     14.0 GB      46%     8 Aug
-Phone hotspot      Wi-Fi         8.8 GB      1.2 GB     10.0 GB      33%     7 Aug
-Office LAN         Ethernet      5.7 GB      0.5 GB      6.2 GB      20%     6 Aug
-```
-
-On narrow layouts, keep only Network + Total used + Share and reveal detail on selection.
-
-A small badge can identify `Likely hotspot / expensive` only when the underlying context supports that wording.
-
-## Current persistent analytics implementation
-
-Persistent analytics are now enabled in the development build.
-
-The analytics views read local SwiftData history rather than only the current process session. Accepted traffic is accumulated into short time buckets and periodically checkpointed; see `data-and-analytics.md` for the exact storage semantics.
-
-This implementation enables real testing of cumulative history across app relaunches, network changes, timeframes, trend aggregation, and per-network totals. It does **not** mean the full analytics/reliability milestones are accepted yet: the real-network M1 validation matrix, sleep/wake hardening, login launch, and remaining session-detail behavior are still pending.
-
-If Wi-Fi identification permission is unavailable, usage remains counted but generic unnamed Wi-Fi history cannot safely be split or retroactively reassigned to named SSIDs.
-
-## Network detail
-
-Selecting a network should eventually open a detail destination/sheet containing:
-
-- display alias;
-- underlying SSID/connection identity when available;
-- type;
-- selected-period total/download/upload;
-- usage-over-time chart;
-- session count;
-- connected duration;
-- first/last seen metadata;
-- rename action.
-
-The current implementation provides network filtering in Trend and network comparison in Networks; a dedicated detail destination, session count/duration, and rename action remain pending.
-
-For `ssid-unavailable` profiles, explain that historical traffic cannot safely be retroactively assigned to a named Wi-Fi network.
-
-## Filters
-
-Currently implemented:
-
-### Period
-
-- Today
-- 7 days
-- 30 days
-- This month
-- All time
-- Custom
-
-### Network
-
-- All networks
-- one selected network in Trend
-
-Planned v1 filters after the current analytics surface is validated:
-
-### Connection type
-
-- All
-- Wi-Fi
-- Ethernet
-- Other
-
-### Cost metadata
-
-Optional compact filter:
-
-- All
-- Likely hotspot only
-
-Avoid a filter-builder UI in v1.
-
-## Onboarding
-
-Keep onboarding to at most a few concise steps.
-
-### Step 1 — What the app measures
-
-Explain:
-
-- local network-interface traffic;
-- history starts when the app is running;
-- all data remains local.
-
-### Step 2 — Wi-Fi identification permission
-
-Explain Location permission only in terms of the feature it enables:
-
-> macOS requires Location access to reveal the current Wi-Fi network name. The app uses it only to group traffic by Wi-Fi network and does not store your physical location.
-
-Actions:
-
-- `Allow Wi-Fi identification`
-- `Not now`
-
-The second action must remain fully functional with generic Wi-Fi profiles.
-
-### Step 3 — Start at login
-
-Recommend auto-start because history is only recorded while the app runs.
-
-Do not hide this behavior.
+The shield may be used inside the popover; do not use a full-color dimensional icon as the menu-bar glyph itself.
 
 ## Settings
 
-### General
+Settings uses three clear product groups:
 
-- launch at login;
-- menu-bar display metric;
-- preferred data units if later needed.
+### Tracking & data
 
-### Privacy / network identification
+- sampling cadence explanation;
+- local-history status/behavior.
 
-- current SSID-identification permission state;
-- explanation of why Location permission is needed;
-- action to request/open System Settings as appropriate;
-- statement that packet contents and destinations are not collected.
+### Wi-Fi network names
 
-### Data
+- Location authorization status;
+- why macOS requires Location permission for SSID;
+- explicit statement that traffic still counts if permission is denied.
 
-- local-history size estimate;
-- reset all usage history with confirmation;
-- export is future unless implemented.
+### Applications Beta
+
+Split into:
+
+**App Activity Preview**
+- enable/disable;
+- availability;
+- live-only/persistence boundary;
+- no locality claim.
+
+**Advanced Provider**
+- signed-build requirement;
+- system component/provider/byte-accounting states;
+- install/disable actions only if the current build actually has the required system-extension entitlement;
+- content-filter coexistence warning.
+
+An ad-hoc build must explain that the signed provider is unavailable by design, while core analytics and App Activity Preview remain usable.
 
 ## Empty / degraded states
 
 ### Fresh install
 
-Dashboard should say that tracking has started and useful trends will appear as usage accumulates, while still showing live usage.
+Show live values immediately and say that useful history will appear as usage accumulates.
 
 ### No network
 
-Show `Offline` and zero live rate. Keep historical dashboard usable.
+Show `Offline` and zero live rate. Historical analytics remain available.
 
-### Location denied
+### Wi-Fi name unavailable
 
-Show traffic normally, grouped under generic Wi-Fi identities. Use direct copy:
+Use direct copy:
 
-`Traffic is being counted, but different Wi-Fi networks cannot be separated by name.`
-
-Permission copy must not dominate the interface.
+> Traffic is being counted, but different Wi-Fi networks cannot be separated by name.
 
 ### Persistence error
 
-This is materially different: if history cannot be saved, show a visible warning because silently displaying live traffic would imply durable tracking.
+Show a visible warning because silently showing live values would imply durable history.
+
+### Preview unavailable
+
+Do not create fake process rows. Show a small unavailable state while leaving all core analytics usable.
+
+### Signed provider unavailable
+
+Do not use error styling when entitlement absence is expected. Reserve red/error styling for a provider that should be available but actually failed.
 
 ## Accessibility
 
-- Do not encode download/upload solely by chart color.
-- Add symbols/labels and accessible descriptions.
-- Support Dynamic Type-equivalent macOS text scaling where SwiftUI provides it.
-- Maintain keyboard navigation for dashboard controls.
-- Format byte values with accessible full labels.
+- do not encode meaning only by color;
+- pair status colors with text/icons;
+- keep keyboard navigation for sidebar, pickers and actions;
+- use monospaced digits for changing metrics where useful;
+- allow native macOS text scaling;
+- provide accessible labels for brand/decorative images;
+- keep contrast readable in light and dark mode.
 
-## Copy terminology
+## Product terminology
 
-Preferred product-facing terms:
+Preferred:
 
-- `Network Usage`
-- `Analytics`
-- `Monitor`
-- `Overview`
-- `Trend`
-- `Networks`
-- `Connected now`
-- `Download now`
-- `Upload now`
-- `Total used`
-- `Downloaded`
-- `Uploaded`
-- `Used since opening`
-- `Usage trend`
-- `Highest usage hour`
-- `Highest usage day`
-- `Largest network spike`
-- `Usage by network`
-- `Saved locally`
-- `Wi-Fi network`
-- `Likely hotspot` only when uncertainty is clear
+- `Traffic Monitoring`;
+- `Overview`;
+- `Trends`;
+- `Networks`;
+- `Applications Beta`;
+- `Monitor`;
+- `Current network`;
+- `Download now`;
+- `Upload now`;
+- `Total network usage`;
+- `Total used`;
+- `Downloaded`;
+- `Uploaded`;
+- `Observed`;
+- `Data quality`;
+- `App Activity Preview`;
+- `Advanced Provider`;
+- `Local` / `External` / `Unknown` only for the signed provider evidence source.
 
-Avoid product-facing terms:
+Avoid outside Monitor:
 
-- `Raw`
-- `Delta`
-- `RX` / `TX`
-- `Exact data usage`
-- `Carrier usage`
-- `Mobile plan used`
-
-unless shown in a technical Monitor surface or a future carrier-side integration makes those statements true.
+- `Raw`;
+- `Delta`;
+- `RX` / `TX`;
+- interface names such as `en0`;
+- `exact data usage`;
+- `carrier usage`;
+- `local-only` as a conclusion from App Activity Preview;
+- `privacy verified` before audit semantics and validated coverage exist.

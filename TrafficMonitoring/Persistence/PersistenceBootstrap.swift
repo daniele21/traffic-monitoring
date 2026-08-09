@@ -5,7 +5,8 @@ import SwiftData
 enum PersistenceBootstrap {
     static let schema = Schema([
         NetworkProfileEntity.self,
-        UsageBucketEntity.self
+        UsageBucketEntity.self,
+        EvidenceCoverageEntity.self
     ])
 
     static func makeContainer(inMemory: Bool = false) throws -> ModelContainer {

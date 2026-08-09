@@ -9,11 +9,17 @@ final class HistoricalAnalyticsViewModel: ObservableObject {
     @Published private(set) var networkRows: [NetworkUsageHistoryRow] = []
     @Published private(set) var trendByNetwork: [NetworkTrendPoint] = []
     @Published private(set) var totalTrend: [UsageTrendPoint] = []
+    @Published private(set) var coverageSummary = EvidenceCoverageSummary()
     @Published private(set) var errorMessage: String?
     @Published private(set) var lastRefreshedAt: Date?
 
     let store: LocalUsageStore
     private let aggregator = UsageAnalyticsAggregator()
+    private let coverageAggregator = EvidenceCoverageAggregator()
+    private let exportService = EvidenceExportService()
+    private var currentSnapshots: [UsageBucketSnapshot] = []
+    private(set) var currentPeriod: DateInterval?
+    private(set) var currentTimeframe: AnalyticsTimeframe = .today
 
     init(store: LocalUsageStore) {
         self.store = store
@@ -27,6 +33,10 @@ final class HistoricalAnalyticsViewModel: ObservableObject {
         trendByNetwork.max { $0.totalBytes < $1.totalBytes }
     }
 
+    var evidenceQuality: EvidenceQuality {
+        coverageSummary.quality
+    }
+
     func refresh(
         timeframe: AnalyticsTimeframe,
         customStart: Date,
@@ -36,8 +46,13 @@ final class HistoricalAnalyticsViewModel: ObservableObject {
         do {
             let period = timeframe.interval(customStart: customStart, customEnd: customEnd)
             let snapshots = try store.snapshots(in: period)
+            let coverage = try store.coverageSnapshots(in: period)
             let granularity = timeframe.granularity
 
+            currentSnapshots = snapshots
+            currentPeriod = period
+            currentTimeframe = timeframe
+            coverageSummary = coverageAggregator.summary(coverage, selectedPeriod: period)
             overallSummary = aggregator.summary(snapshots)
             networkRows = aggregator.usageByNetwork(snapshots)
 
@@ -56,6 +71,50 @@ final class HistoricalAnalyticsViewModel: ObservableObject {
         } catch {
             errorMessage = "Analytics could not be loaded: \(error.localizedDescription)"
         }
+    }
+
+    func renameNetwork(identityKey: String, alias: String?) throws {
+        try store.renameNetwork(identityKey: identityKey, alias: alias)
+    }
+
+    func alias(for identityKey: String) throws -> String? {
+        try store.alias(for: identityKey)
+    }
+
+    func detailRow(for identityKey: String) -> NetworkUsageHistoryRow? {
+        aggregator.usageByNetwork(currentSnapshots.filter { $0.identityKey == identityKey }).first
+    }
+
+    func detailTrend(for identityKey: String) -> [UsageTrendPoint] {
+        aggregator.timeSeries(
+            currentSnapshots.filter { $0.identityKey == identityKey },
+            granularity: currentTimeframe.granularity
+        )
+    }
+
+    func identityQuality(for row: NetworkUsageHistoryRow) -> EvidenceQuality {
+        NetworkIdentityQuality.quality(
+            identityKey: row.identityKey,
+            connectionKind: row.connectionKind,
+            networkName: row.networkName
+        )
+    }
+
+    func makeExportDocument(appVersion: String) -> EvidenceExportDocument {
+        exportService.makeDocument(
+            usage: currentSnapshots,
+            coverage: coverageSummary,
+            period: currentPeriod,
+            appVersion: appVersion
+        )
+    }
+
+    func jsonExport(appVersion: String) throws -> String {
+        try exportService.jsonString(makeExportDocument(appVersion: appVersion))
+    }
+
+    func csvExport(appVersion: String) -> String {
+        exportService.csvString(makeExportDocument(appVersion: appVersion))
     }
 }
 

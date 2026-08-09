@@ -30,6 +30,18 @@ final class LocalUsageStore {
         var lastObservedAt: Date
     }
 
+    private struct PendingCoverage {
+        let bucketKey: String
+        let startedAt: Date
+        let endedAt: Date
+        var activeSeconds: TimeInterval
+        var healthySeconds: TimeInterval
+        var metadataDegradedSeconds: TimeInterval
+        var trackingDegradedSeconds: TimeInterval
+        var unknownNetworkSeconds: TimeInterval
+        var lastObservedAt: Date
+    }
+
     let persistsAcrossRelaunches: Bool
     private(set) var persistenceErrorMessage: String?
     private(set) var lastCheckpointAt: Date?
@@ -38,13 +50,17 @@ final class LocalUsageStore {
     private let context: ModelContext
     private let checkpointInterval: TimeInterval
     private let bucketInterval: TimeInterval
+    private let maximumContinuousObservationGap: TimeInterval
     private var pendingByKey: [String: PendingBucket] = [:]
+    private var pendingCoverageByKey: [String: PendingCoverage] = [:]
+    private var lastCoverageObservedAt: Date?
     private var lastFlushAttemptAt: Date
 
     init(
         inMemory: Bool = false,
         checkpointInterval: TimeInterval = 15,
-        bucketInterval: TimeInterval = 300
+        bucketInterval: TimeInterval = 300,
+        maximumContinuousObservationGap: TimeInterval = 10
     ) throws {
         container = try PersistenceBootstrap.makeContainer(inMemory: inMemory)
         context = ModelContext(container)
@@ -52,6 +68,7 @@ final class LocalUsageStore {
         persistsAcrossRelaunches = !inMemory
         self.checkpointInterval = checkpointInterval
         self.bucketInterval = bucketInterval
+        self.maximumContinuousObservationGap = maximumContinuousObservationGap
         lastFlushAttemptAt = Date()
     }
 
@@ -108,6 +125,32 @@ final class LocalUsageStore {
         }
     }
 
+    /// Records observation coverage without writing one row per sample.
+    /// Long gaps are deliberately not counted as observed time so sleep, crashes,
+    /// or periods when the app was not running remain visible as coverage gaps.
+    func recordCoverage(
+        observedAt: Date,
+        metadataDegraded: Bool,
+        unknownNetwork: Bool,
+        trackingDegraded: Bool
+    ) {
+        defer { lastCoverageObservedAt = observedAt }
+        guard let previous = lastCoverageObservedAt else { return }
+
+        let elapsed = observedAt.timeIntervalSince(previous)
+        guard elapsed > 0 else { return }
+
+        let countedDuration = min(elapsed, maximumContinuousObservationGap)
+        let countedStart = observedAt.addingTimeInterval(-countedDuration)
+        recordCoverageSlice(
+            from: countedStart,
+            to: observedAt,
+            metadataDegraded: metadataDegraded,
+            unknownNetwork: unknownNetwork,
+            trackingDegraded: trackingDegraded
+        )
+    }
+
     func flushIfNeeded(now: Date = Date()) throws {
         guard now.timeIntervalSince(lastFlushAttemptAt) >= checkpointInterval else { return }
         try flush(now: now)
@@ -115,7 +158,7 @@ final class LocalUsageStore {
 
     func flush(now: Date = Date()) throws {
         lastFlushAttemptAt = now
-        guard !pendingByKey.isEmpty else {
+        guard !pendingByKey.isEmpty || !pendingCoverageByKey.isEmpty else {
             lastCheckpointAt = now
             return
         }
@@ -125,8 +168,12 @@ final class LocalUsageStore {
                 try upsertProfile(for: pending)
                 try upsertBucket(pending)
             }
+            for coverage in pendingCoverageByKey.values {
+                try upsertCoverage(coverage)
+            }
             try context.save()
             pendingByKey.removeAll(keepingCapacity: true)
+            pendingCoverageByKey.removeAll(keepingCapacity: true)
             lastCheckpointAt = now
             if persistsAcrossRelaunches {
                 persistenceErrorMessage = nil
@@ -158,14 +205,17 @@ final class LocalUsageStore {
             entities = try context.fetch(descriptor)
         }
 
-        var result = entities.compactMap(snapshot(from:))
+        let presentationNames = try profilePresentationNames()
+        var result = entities.compactMap { entity in
+            snapshot(from: entity, presentationNames: presentationNames)
+        }
 
         for pending in pendingByKey.values where overlaps(pending, period: period) {
             result.append(
                 UsageBucketSnapshot(
                     bucketKey: "pending:\(pending.bucketKey)",
                     identityKey: pending.identityKey,
-                    networkName: pending.networkName,
+                    networkName: presentationNames[pending.identityKey] ?? pending.networkName,
                     connectionKind: pending.connectionKind,
                     interfaceName: pending.interfaceName,
                     startedAt: pending.startedAt,
@@ -180,6 +230,110 @@ final class LocalUsageStore {
         }
 
         return result.sorted { $0.startedAt < $1.startedAt }
+    }
+
+    func coverageSnapshots(in period: DateInterval?) throws -> [EvidenceCoverageSnapshot] {
+        let entities: [EvidenceCoverageEntity]
+
+        if let period {
+            let start = period.start
+            let end = period.end
+            let descriptor = FetchDescriptor<EvidenceCoverageEntity>(
+                predicate: #Predicate<EvidenceCoverageEntity> { bucket in
+                    bucket.startedAt < end && bucket.endedAt > start
+                },
+                sortBy: [SortDescriptor(\EvidenceCoverageEntity.startedAt)]
+            )
+            entities = try context.fetch(descriptor)
+        } else {
+            entities = try context.fetch(
+                FetchDescriptor<EvidenceCoverageEntity>(sortBy: [SortDescriptor(\EvidenceCoverageEntity.startedAt)])
+            )
+        }
+
+        var result = entities.map(coverageSnapshot(from:))
+        for pending in pendingCoverageByKey.values where overlaps(pending, period: period) {
+            result.append(
+                EvidenceCoverageSnapshot(
+                    bucketKey: "pending:\(pending.bucketKey)",
+                    startedAt: pending.startedAt,
+                    endedAt: pending.endedAt,
+                    activeSeconds: pending.activeSeconds,
+                    healthySeconds: pending.healthySeconds,
+                    metadataDegradedSeconds: pending.metadataDegradedSeconds,
+                    trackingDegradedSeconds: pending.trackingDegradedSeconds,
+                    unknownNetworkSeconds: pending.unknownNetworkSeconds,
+                    lastObservedAt: pending.lastObservedAt
+                )
+            )
+        }
+        return result.sorted { $0.startedAt < $1.startedAt }
+    }
+
+    func renameNetwork(identityKey: String, alias: String?) throws {
+        try flush()
+        let identity = identityKey
+        var descriptor = FetchDescriptor<NetworkProfileEntity>(
+            predicate: #Predicate<NetworkProfileEntity> { profile in
+                profile.identityKey == identity
+            }
+        )
+        descriptor.fetchLimit = 1
+        guard let profile = try context.fetch(descriptor).first else { return }
+
+        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        profile.displayAlias = trimmed.isEmpty ? nil : trimmed
+        try context.save()
+    }
+
+    func alias(for identityKey: String) throws -> String? {
+        let identity = identityKey
+        var descriptor = FetchDescriptor<NetworkProfileEntity>(
+            predicate: #Predicate<NetworkProfileEntity> { profile in
+                profile.identityKey == identity
+            }
+        )
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first?.displayAlias
+    }
+
+    private func recordCoverageSlice(
+        from start: Date,
+        to end: Date,
+        metadataDegraded: Bool,
+        unknownNetwork: Bool,
+        trackingDegraded: Bool
+    ) {
+        var cursor = start
+        while cursor < end {
+            let bucketStartDate = bucketStart(containing: cursor)
+            let bucketEndDate = bucketStartDate.addingTimeInterval(bucketInterval)
+            let sliceEnd = min(end, bucketEndDate)
+            let duration = max(0, sliceEnd.timeIntervalSince(cursor))
+            guard duration > 0 else { break }
+
+            let key = "coverage:\(Int64(bucketStartDate.timeIntervalSince1970))"
+            var pending = pendingCoverageByKey[key] ?? PendingCoverage(
+                bucketKey: key,
+                startedAt: bucketStartDate,
+                endedAt: bucketEndDate,
+                activeSeconds: 0,
+                healthySeconds: 0,
+                metadataDegradedSeconds: 0,
+                trackingDegradedSeconds: 0,
+                unknownNetworkSeconds: 0,
+                lastObservedAt: sliceEnd
+            )
+
+            pending.activeSeconds += duration
+            if !trackingDegraded { pending.healthySeconds += duration }
+            if metadataDegraded { pending.metadataDegradedSeconds += duration }
+            if trackingDegraded { pending.trackingDegradedSeconds += duration }
+            if unknownNetwork { pending.unknownNetworkSeconds += duration }
+            pending.lastObservedAt = max(pending.lastObservedAt, sliceEnd)
+            pendingCoverageByKey[key] = pending
+            cursor = sliceEnd
+        }
     }
 
     private func upsertProfile(for pending: PendingBucket) throws {
@@ -252,13 +406,56 @@ final class LocalUsageStore {
         }
     }
 
-    private func snapshot(from entity: UsageBucketEntity) -> UsageBucketSnapshot? {
+    private func upsertCoverage(_ pending: PendingCoverage) throws {
+        let key = pending.bucketKey
+        var descriptor = FetchDescriptor<EvidenceCoverageEntity>(
+            predicate: #Predicate<EvidenceCoverageEntity> { bucket in
+                bucket.bucketKey == key
+            }
+        )
+        descriptor.fetchLimit = 1
+
+        if let existing = try context.fetch(descriptor).first {
+            existing.activeSeconds += pending.activeSeconds
+            existing.healthySeconds += pending.healthySeconds
+            existing.metadataDegradedSeconds += pending.metadataDegradedSeconds
+            existing.trackingDegradedSeconds += pending.trackingDegradedSeconds
+            existing.unknownNetworkSeconds += pending.unknownNetworkSeconds
+            existing.lastObservedAt = max(existing.lastObservedAt, pending.lastObservedAt)
+        } else {
+            context.insert(
+                EvidenceCoverageEntity(
+                    bucketKey: pending.bucketKey,
+                    startedAt: pending.startedAt,
+                    endedAt: pending.endedAt,
+                    activeSeconds: pending.activeSeconds,
+                    healthySeconds: pending.healthySeconds,
+                    metadataDegradedSeconds: pending.metadataDegradedSeconds,
+                    trackingDegradedSeconds: pending.trackingDegradedSeconds,
+                    unknownNetworkSeconds: pending.unknownNetworkSeconds,
+                    lastObservedAt: pending.lastObservedAt
+                )
+            )
+        }
+    }
+
+    private func profilePresentationNames() throws -> [String: String] {
+        let profiles = try context.fetch(FetchDescriptor<NetworkProfileEntity>())
+        return Dictionary(uniqueKeysWithValues: profiles.map { profile in
+            (profile.identityKey, profile.displayAlias ?? profile.networkName)
+        })
+    }
+
+    private func snapshot(
+        from entity: UsageBucketEntity,
+        presentationNames: [String: String]
+    ) -> UsageBucketSnapshot? {
         guard entity.downloadedBytes >= 0, entity.uploadedBytes >= 0 else { return nil }
 
         return UsageBucketSnapshot(
             bucketKey: entity.bucketKey,
             identityKey: entity.identityKey,
-            networkName: entity.networkName,
+            networkName: presentationNames[entity.identityKey] ?? entity.networkName,
             connectionKind: NetworkConnectionKind(rawValue: entity.connectionKindRaw) ?? .other,
             interfaceName: entity.interfaceName,
             startedAt: entity.startedAt,
@@ -271,7 +468,26 @@ final class LocalUsageStore {
         )
     }
 
+    private func coverageSnapshot(from entity: EvidenceCoverageEntity) -> EvidenceCoverageSnapshot {
+        EvidenceCoverageSnapshot(
+            bucketKey: entity.bucketKey,
+            startedAt: entity.startedAt,
+            endedAt: entity.endedAt,
+            activeSeconds: entity.activeSeconds,
+            healthySeconds: entity.healthySeconds,
+            metadataDegradedSeconds: entity.metadataDegradedSeconds,
+            trackingDegradedSeconds: entity.trackingDegradedSeconds,
+            unknownNetworkSeconds: entity.unknownNetworkSeconds,
+            lastObservedAt: entity.lastObservedAt
+        )
+    }
+
     private func overlaps(_ pending: PendingBucket, period: DateInterval?) -> Bool {
+        guard let period else { return true }
+        return pending.startedAt < period.end && pending.endedAt > period.start
+    }
+
+    private func overlaps(_ pending: PendingCoverage, period: DateInterval?) -> Bool {
         guard let period else { return true }
         return pending.startedAt < period.end && pending.endedAt > period.start
     }

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "agent/**"]
+    branches: [main, "agent/**", "positioning/**"]
   pull_request:
   workflow_dispatch:
 
@@ -25,6 +25,21 @@ jobs:
       - name: Swift core tests
         run: swift test
 
+      - name: Validate Advanced Observability security tooling
+        run: |
+          set -euo pipefail
+          bash -n scripts/verify-signed-advanced-observability.sh
+          swiftc scripts/advanced-observability-xpc-probe.swift -o "$RUNNER_TEMP/advanced-observability-xpc-probe"
+
+      - name: Validate non-privileged App Activity Preview source
+        run: |
+          set -euo pipefail
+          test -x /usr/bin/nettop
+          output="$(/usr/bin/nettop -n -P -L 1 -x -J bytes_in,bytes_out)"
+          header="$(printf '%s\n' "$output" | head -1 | tr -d '\r')"
+          test "$header" = ",bytes_in,bytes_out,"
+          printf 'nettop process-summary interface available\n'
+
       - name: Xcode build and tests
         run: |
           set -o pipefail
@@ -36,6 +51,20 @@ jobs:
             -derivedDataPath .build/ci-tests \
             CODE_SIGNING_ALLOWED=NO \
             build test 2>&1 | tee xcodebuild.log
+
+      - name: Build Advanced Observability spike (unsigned)
+        run: |
+          set -o pipefail
+          cd experiments/advanced-observability
+          xcodegen generate
+          xcodebuild \
+            -project TrafficMonitoringAdvancedObservabilitySpike.xcodeproj \
+            -scheme AdvancedObservabilitySpike \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath ../../.build/advanced-observability \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee ../../advanced-observability-build.log
 
       - name: Build clean Release app bundle
         run: |
@@ -49,22 +78,31 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee app-build.log
 
+      - name: Verify Advanced Observability bundle structure
+        run: |
+          set -euo pipefail
+          APP_PATH=".build/package/Build/Products/Release/TrafficMonitoring.app"
+          EXT_PATH="$APP_PATH/Contents/Library/SystemExtensions/com.daniele21.trafficmonitoring.filter.systemextension"
+
+          test -d "$APP_PATH"
+          test -d "$EXT_PATH"
+
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$EXT_PATH/Contents/Info.plist")" = "com.daniele21.trafficmonitoring.filter"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NEMachServiceName' "$EXT_PATH/Contents/Info.plist")" = "group.com.daniele21.trafficmonitoring.advanced-observability"
+          /usr/libexec/PlistBuddy -c 'Print :NSSystemExtensionUsageDescription' "$APP_PATH/Contents/Info.plist" >/dev/null
+
       - name: Package runnable macOS app
         run: |
           set -euo pipefail
           APP_PATH=".build/package/Build/Products/Release/TrafficMonitoring.app"
           ARCHIVE_PATH="TrafficMonitoring.app.zip"
 
-          test -d "$APP_PATH"
-
-          # CI has no distribution certificate. Ad-hoc signing gives the local
-          # test bundle a coherent code signature without pretending it is
-          # notarized or suitable for public distribution.
+          # CI has no production Developer ID / Network Extension provisioning.
+          # Ad-hoc signing keeps the core development app runnable but does not
+          # pretend Advanced Observability can be activated with this artifact.
           codesign --force --deep --sign - "$APP_PATH"
           codesign --verify --deep --strict "$APP_PATH"
 
-          # Pre-compress the .app so executable permissions and bundle metadata
-          # survive GitHub Actions artifact transport.
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
           shasum -a 256 "$ARCHIVE_PATH" > TrafficMonitoring.app.zip.sha256
 
@@ -86,5 +124,6 @@ jobs:
           path: |
             xcodebuild.log
             app-build.log
+            advanced-observability-build.log
           if-no-files-found: ignore
           retention-days: 7

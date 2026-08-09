@@ -14,6 +14,13 @@ targets:
     platform: macOS
     sources:
       - path: TrafficMonitoring
+    dependencies:
+      - target: TrafficMonitoringFilterDataProvider
+        embed: true
+        link: false
+      - sdk: NetworkExtension.framework
+      - sdk: SystemExtensions.framework
+      - sdk: Security.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring
@@ -22,8 +29,37 @@ targets:
         INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSLocationUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Traffic Monitoring uses Location only to read the current Wi-Fi network name for local usage grouping.
+        INFOPLIST_KEY_NSSystemExtensionUsageDescription: Traffic Monitoring uses an optional Network Extension system component to attribute aggregate network flow metadata to source applications for local Advanced Observability. It does not inspect or store packet contents.
         ENABLE_APP_SANDBOX: NO
-        MARKETING_VERSION: 0.1.0
+        CODE_SIGN_ENTITLEMENTS: TrafficMonitoring/TrafficMonitoring.entitlements
+        PROVISIONING_PROFILE_SPECIFIER: $(TM_HOST_PROFILE_SPECIFIER)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        MARKETING_VERSION: 0.2.0
+        CURRENT_PROJECT_VERSION: 1
+
+  TrafficMonitoringFilterDataProvider:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: experiments/advanced-observability/Sources
+    dependencies:
+      - sdk: NetworkExtension.framework
+      - sdk: Network.framework
+      - sdk: Security.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daniele21.trafficmonitoring.filter
+        PRODUCT_NAME: TrafficMonitoringFilterDataProvider
+        PRODUCT_MODULE_NAME: TrafficMonitoringFilterDataProvider
+        EXECUTABLE_NAME: TrafficMonitoringFilterDataProvider
+        WRAPPER_NAME: com.daniele21.trafficmonitoring.filter.systemextension
+        INFOPLIST_FILE: experiments/advanced-observability/Info.plist
+        CODE_SIGN_ENTITLEMENTS: experiments/advanced-observability/TrafficMonitoringFilterExtension.entitlements
+        PROVISIONING_PROFILE_SPECIFIER: $(TM_EXTENSION_PROFILE_SPECIFIER)
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        MARKETING_VERSION: 0.2.0
         CURRENT_PROJECT_VERSION: 1
 
   TrafficMonitoringTests:
@@ -45,6 +81,7 @@ schemes:
     build:
       targets:
         TrafficMonitoring: all
+        TrafficMonitoringFilterDataProvider: all
         TrafficMonitoringTests: [test]
     test:
       targets:

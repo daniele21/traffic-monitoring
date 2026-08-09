@@ -54,6 +54,44 @@ final class LocalUsageStoreTests: XCTestCase {
         XCTAssertEqual(rows.map(\.networkName), ["Phone", "Home"])
     }
 
+    func testAliasChangesPresentationWithoutChangingIdentity() throws {
+        let store = try LocalUsageStore(inMemory: true)
+        let observedAt = Date(timeIntervalSince1970: 1_786_180_800)
+        let identity = "wifi:en0:TIM-1234"
+
+        record(store, identity: identity, name: "TIM-1234", bytes: 1_000, at: observedAt)
+        try store.flush()
+        try store.renameNetwork(identityKey: identity, alias: "Home")
+
+        let snapshot = try XCTUnwrap(store.snapshots(in: nil).first)
+        XCTAssertEqual(snapshot.identityKey, identity)
+        XCTAssertEqual(snapshot.networkName, "Home")
+        XCTAssertEqual(try store.alias(for: identity), "Home")
+    }
+
+    func testCoveragePersistsWithoutCountingLongGapAsObserved() throws {
+        let store = try LocalUsageStore(
+            inMemory: true,
+            checkpointInterval: 15,
+            bucketInterval: 300,
+            maximumContinuousObservationGap: 10
+        )
+        let start = Date(timeIntervalSince1970: 1_786_180_800)
+
+        store.recordCoverage(observedAt: start, metadataDegraded: false, unknownNetwork: false, trackingDegraded: false)
+        store.recordCoverage(observedAt: start.addingTimeInterval(2), metadataDegraded: false, unknownNetwork: false, trackingDegraded: false)
+        store.recordCoverage(observedAt: start.addingTimeInterval(102), metadataDegraded: true, unknownNetwork: true, trackingDegraded: false)
+        try store.flush()
+
+        let coverage = try store.coverageSnapshots(in: nil)
+        let summary = EvidenceCoverageAggregator().summary(coverage, selectedPeriod: DateInterval(start: start, end: start.addingTimeInterval(102)))
+
+        XCTAssertEqual(summary.observedSeconds, 12, accuracy: 0.001)
+        XCTAssertEqual(summary.metadataDegradedSeconds, 10, accuracy: 0.001)
+        XCTAssertEqual(summary.unknownNetworkSeconds, 10, accuracy: 0.001)
+        XCTAssertEqual(summary.unobservedSeconds, 90, accuracy: 0.001)
+    }
+
     private func total(_ store: LocalUsageStore) throws -> UInt64 {
         UsageAnalyticsAggregator().summary(try store.snapshots(in: nil)).totalBytes
     }

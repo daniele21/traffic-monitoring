@@ -1,48 +1,295 @@
-# Traffic Monitoring
+<p align="center">
+  <img src="TrafficMonitoring/Resources/BrandAssets.xcassets/BrandShield.imageset/shield.svg" width="132" alt="Traffic Monitoring shield logo">
+</p>
 
-A lightweight, privacy-first macOS menu-bar app for measuring network-interface traffic and attributing usage to the network context where it occurred.
+<h1 align="center">Traffic Monitoring</h1>
 
-The app continuously records download/upload usage across Wi-Fi, Personal Hotspot, Ethernet, and other supported physical connections. Historical persistence and analytics are planned after the measurement layer is validated on real macOS networks.
+<p align="center">
+  <strong>Local Network Observability for macOS</strong><br>
+  Measure what moves. Understand where it moves.<br>
+  A privacy-first network evidence tool for understanding device traffic today and progressively validating local-first software behavior.
+</p>
 
-## Current development state
+<p align="center">
+  <a href="https://daniele21.github.io/">Mission</a> ·
+  <a href="#network-evidence-vision">Vision</a> ·
+  <a href="#values-and-opportunities">Opportunities</a> ·
+  <a href="#where-we-are-today">Today</a> ·
+  <a href="#how-it-works">Architecture</a> ·
+  <a href="#run-it">Run it</a> ·
+  <a href="#evidence-and-maturity">Evidence</a>
+</p>
 
-The repository is implementing **M0 — Project bootstrap** and **M1 — Measurement feasibility** from `docs/implementation-plan.md`.
+<p align="center">
+  <a href="https://github.com/daniele21/traffic-monitoring/actions/workflows/ci.yml"><img alt="Repository validation" src="https://github.com/daniele21/traffic-monitoring/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-macOS-F05138?logo=swift&logoColor=white">
+  <img alt="Local-first" src="https://img.shields.io/badge/data-local--first-207CCE">
+</p>
 
-Implemented in the first development slice:
+## Why this exists
 
-- native SwiftUI macOS app skeleton;
-- menu-bar utility and analytics/diagnostic window;
-- public-API Darwin 64-bit interface counter reader;
-- CoreWLAN Wi-Fi interface/SSID enrichment;
-- `NWPathMonitor` path metadata (`isExpensive`, `isConstrained`);
-- physical/virtual interface classification;
-- safe cumulative-counter delta calculation;
-- diagnostic table with raw counters and live deltas;
-- deterministic Swift core tests;
-- macOS GitHub Actions build/test workflow;
-- downloadable clean Release `.app` artifact from successful CI runs.
+My broader mission is to [build infrastructure for product-grade local AI](https://daniele21.github.io/): local-first architectures should give products more control over runtime, data, cost, and model lifecycle without pretending the cloud is always wrong or local execution is always sufficient.
 
-Persistence and historical analytics are intentionally deferred until the M1 real-network validation gate passes.
+That control comes with responsibility. If a product says that sensitive work stays on a user-owned device, teams need more than a privacy claim: they need **observability, measurable boundaries, and evidence that reflects what was actually observed**.
 
-## Run without installing Xcode
+Traffic Monitoring focuses on the network side of that problem.
 
-The easiest way to test the current app is to use the macOS build produced by GitHub Actions.
+It started from a simple practical question:
 
-1. Open **Actions** → **CI** in this repository.
-2. Open the latest successful run for the branch/PR you want to test.
+> **How much data am I actually using when my Mac connects through my phone hotspot?**
+
+The useful answer turned out to require more than a counter. A trustworthy tool also needs to know which network context produced the traffic, how much of a period was actually observed, when network identity was incomplete, and which conclusions the data does — and does not — support.
+
+The project is therefore evolving from a lightweight usage monitor into a reusable **Evidence & Observability** layer for local-first software while keeping the original utility useful on its own.
+
+The end state is intentionally not a packet sniffer and not an AI runtime:
+
+- everyday users can understand network usage across Wi-Fi, hotspot, Ethernet, and time;
+- developers can inspect best-effort application activity without installing a privileged component;
+- richer signed application-flow evidence can remain a separately gated capability;
+- future privacy-validation workflows are allowed only when the underlying evidence is strong enough to support them;
+- packet payloads, browsing content, and raw user data do not become the price of observability.
+
+## Values and opportunities
+
+Traffic Monitoring is designed around values that make local-first systems more understandable without turning network observability into surveillance.
+
+| Value | What it means | Opportunity it creates |
+| --- | --- | --- |
+| **Local-first control** | Usage history, analytics, aliases, and preview data stay on the Mac unless the user explicitly exports evidence | Useful network analytics without creating another cloud telemetry dependency |
+| **Evidence over claims** | Traffic totals are paired with observation coverage, identity quality, explicit gaps, and known limitations | Teams can distinguish what was measured from what is merely assumed |
+| **Observe, don't inspect** | The core works from counters and metadata; app preview uses process summaries; the advanced prototype exchanges aggregates rather than payloads | Network behavior can become visible without retaining browsing or message content |
+| **Unknown is valid** | Unknown network, unknown application, degraded coverage, and unvalidated byte accounting remain explicit states | Incomplete evidence does not become a false privacy conclusion |
+| **Useful without privileges** | Core analytics and App Activity Preview do not depend on a paid Apple Developer Program or an installed Network Extension | The repository remains useful to ordinary Mac users and open-source contributors |
+| **Gated advanced capability** | Privileged application-flow evidence stays separate from the lightweight tracker and requires its own validation | More powerful observability can evolve without making the base product fragile or invasive |
+
+This creates several practical opportunities:
+
+- **For Mac users:** understand hotspot consumption, network history, download/upload balance, peaks, and which networks account for usage.
+- **For privacy-conscious users:** keep network analytics local and inspect measurement quality instead of trusting opaque cloud telemetry.
+- **For local-first developers:** get a lightweight application-activity view today and a path toward stronger network evidence later.
+- **For product teams:** document observed network behavior alongside local-first architecture decisions and validation work.
+- **For open-source engineering:** explore how far useful observability can go with public, non-privileged macOS capabilities before accepting privileged deployment complexity.
+
+## Network evidence vision
+
+The target product is a **local network evidence layer for macOS**: one tool that can move from device-level usage visibility toward progressively stronger application-level evidence while keeping each evidence level explicit.
+
+The target architecture has three deliberately different capability tiers:
+
+```text
+Traffic Monitoring
+│
+├── Core network evidence
+│   ├── physical-interface counters
+│   ├── network identity and path metadata
+│   ├── historical usage and observation coverage
+│   └── reproducible aggregate export
+│
+├── App Activity Preview
+│   ├── no privileged installation
+│   ├── application and process activity grouping
+│   ├── cumulative process byte summaries
+│   └── no locality or privacy verdict
+│
+└── Advanced Provider
+    ├── optional signed Network Extension system extension
+    ├── source-application identity
+    ├── Local / External / Unknown flow classification
+    ├── experimental byte accounting
+    └── future audit evidence only after real-device validation
+```
+
+The distinction matters. A physical-interface counter can prove that bytes crossed an interface; it cannot prove which application produced them. A process summary can show app activity; it cannot prove whether those bytes were loopback, LAN, or Internet traffic. A future audit must therefore inherit the limitations of the exact evidence source rather than hide them.
+
+## Strategy: from traffic counter to evidence layer
+
+The strategy is to strengthen evidence quality before making stronger privacy claims.
+
+Each stage remains useful on its own:
+
+1. **Measure the network correctly:** use stable 64-bit physical-interface counters, avoid VPN double counting, and attribute deltas to the network context that produced them.
+2. **Make the measurement explainable:** persist aggregate history, record observation coverage, surface unknown identity, and export reproducible network evidence.
+3. **Add application visibility without privilege:** use a local macOS process-summary source as a best-effort preview and aggregate helper processes into application-level rows when macOS metadata allows it.
+4. **Gate richer flow evidence:** keep Network Extension application/locality evidence optional, signed, and independent from the core tracker.
+5. **Earn audit semantics:** only introduce privacy-audit or regression-test conclusions after source identity, locality, coverage, byte accounting, helper processes, VPN behavior, and performance are validated on real Macs.
+
+This is the same engineering principle behind the broader local-first mission: **running something locally is only the beginning; operating it reliably and observably is the real product work.**
+
+## Where we are today
+
+**Traffic Monitoring is currently a tangible local network observability app for macOS.** The core network evidence path and non-privileged application preview are usable today. The signed Advanced Provider is implemented as a prototype but is not release-validated.
+
+The current app lets a user or developer:
+
+- measure download/upload continuously from physical macOS network interfaces using 64-bit Darwin counters;
+- attribute traffic to Wi-Fi, Personal Hotspot, Ethernet, and supported physical network contexts;
+- enrich Wi-Fi identity with SSID when macOS Location permission allows it, while continuing to count traffic when permission is denied;
+- inspect Today / 7 days / 30 days / This month / All time / Custom historical ranges;
+- compare networks, inspect trends and peaks, assign friendly aliases, and drill into network detail;
+- inspect **observation coverage** and evidence quality instead of assuming an entire selected period was monitored;
+- preview and save versioned JSON / CSV aggregate network evidence;
+- inspect **Applications Beta** without privileged installation;
+- view application-level activity totals by aggregating multiple related processes when macOS application metadata makes that relationship observable;
+- switch to process-level detail when PID-level diagnostics are useful;
+- keep richer Local / External / Unknown application-flow evidence behind the separately gated Advanced Provider path.
+
+> **Current boundary:** App Activity Preview is best-effort activity visibility, not privacy evidence. Its process totals can include activity from before Traffic Monitoring opened, and it cannot determine whether traffic stayed on the Mac, reached the LAN, or reached the public Internet. The signed Advanced Provider must not be treated as validated merely because its source, build, packaging, and IPC gates pass in CI.
+
+The main product surfaces are organized around the questions a user is trying to answer:
+
+| Surface | Primary question |
+| --- | --- |
+| **Overview** | How much network traffic did this Mac use in the selected period, and how trustworthy is the observation coverage? |
+| **Trends** | When did traffic happen, where were the peaks, and how did networks compare over time? |
+| **Networks** | Which network contexts accounted for usage, and what do we know about each one? |
+| **Applications Beta** | Which applications/processes show network activity right now, and what evidence level is available? |
+| **Monitor** | What are the underlying interface counters and last-sample diagnostics? |
+| **Settings** | How are Wi-Fi identity, local storage, App Activity Preview, and the optional Advanced Provider configured? |
+
+### Core network evidence
+
+Traffic Monitoring keeps usage and evidence quality separate:
+
+```text
+Observed usage
+    +
+Observation coverage
+    +
+Network identity quality
+    =
+Network-level evidence
+```
+
+Core evidence states include:
+
+- **Identified** — the observed network context is identified and there are no known gaps for the interval;
+- **Partially identified** — some time was not observed or some usage used weaker metadata;
+- **Unknown network** — traffic was measured but a reliable Wi-Fi/network identity was unavailable;
+- **Tracking degraded** — a counter, persistence, or observation problem affected part of the evidence.
+
+Sleep, app shutdown, crashes, and long observation gaps are not silently filled in as monitored time.
+
+### App Activity Preview — available without Apple Developer Program
+
+The lightweight Applications path samples the local macOS process network summary and shows best-effort:
+
+- application name when it can be resolved;
+- bundle identifier when available;
+- number of contributing processes;
+- downloaded bytes;
+- uploaded bytes;
+- total bytes;
+- underlying process/PID detail;
+- latest preview refresh.
+
+Traffic Monitoring attempts to resolve each sampled PID to its owning macOS application and may follow parent-process relationships to group helper processes under the application that owns them. When the owner cannot be determined reliably, the row remains a best-effort process group rather than inventing application identity.
+
+This path uses the local macOS `nettop` process-summary interface and does **not** require a Network Extension, system-extension installation, Developer ID, or Apple Developer Program membership.
+
+It remains intentionally separate from network evidence export and cannot establish Local / LAN / Internet locality or a `local-only` verdict.
+
+See [`docs/non-privileged-app-activity.md`](docs/non-privileged-app-activity.md).
+
+### Advanced Provider — experimental signed path
+
+The repository also contains the B0/B1/B2 prototype for richer application-flow evidence:
+
+- embedded macOS `NEFilterDataProvider` system-extension target;
+- source application resolution from the macOS audit-token path with explicit `Unknown application` fallback;
+- deterministic loopback / local-network / external / unknown classification;
+- low-frequency flow statistics with byte accounting still marked **Not validated**;
+- authenticated provider → app Mach/XPC aggregate bridge;
+- provider lifecycle, approval/configuration states, and local runtime diagnostics;
+- Applications provider table/detail when signed evidence exists.
+
+All source/build/package gates pass in CI, but runtime activation requires Apple signing/capabilities and representative real-Mac validation.
+
+The normal downloadable ad-hoc CI build detects the missing entitlement and presents the capability as **Signed build required** instead of pretending the provider is broken or active.
+
+See:
+
+- [`docs/b0-b2-implementation-status.md`](docs/b0-b2-implementation-status.md)
+- [`docs/advanced-observability-feasibility.md`](docs/advanced-observability-feasibility.md)
+- [`docs/advanced-observability-signed-runbook.md`](docs/advanced-observability-signed-runbook.md)
+
+## How it works
+
+![Traffic Monitoring architecture](traffic-monitoring-arch.png)
+
+The current implementation keeps the lightweight tracker, application preview, and privileged prototype behind separate boundaries:
+
+- **Network context:** `NWPathMonitor` provides path status plus expensive/constrained metadata; CoreWLAN enriches Wi-Fi context with SSID when permission allows it.
+- **Physical counters:** the production reader uses Darwin routing `sysctl` data and 64-bit `if_data64` byte counters rather than short-lived session estimates.
+- **Attribution:** deltas are assigned to the network identity active for that interface; context changes reset baselines instead of moving old bytes into a new network.
+- **Persistence:** deltas accumulate in memory, are compacted into five-minute usage/coverage buckets, and checkpoint to SwiftData roughly every fifteen seconds.
+- **Analytics:** Overview, Trends, Networks, peaks, aliases, coverage, and custom timeframes are derived from aggregate history plus pending in-memory usage.
+- **Application preview:** `nettop` process summaries are parsed locally, resolved toward application identity where possible, aggregated for product UI, and kept out of authoritative network evidence/export.
+- **Advanced provider:** the optional Network Extension prototype classifies observed flows and exposes aggregate evidence over authenticated XPC without sending packet payloads to the main app.
+
+The dependency direction is deliberate:
+
+```text
+Platform sources
+    ↓
+Tracking / evidence domain
+    ↓
+Local aggregate persistence
+    ↓
+Analytics / application activity controllers
+    ↓
+SwiftUI product surfaces
+```
+
+Core tracking remains functional when Wi-Fi naming permission is denied, App Activity Preview is disabled, or the Advanced Provider is absent.
+
+For the durable boundaries and trade-offs, read [`docs/architecture.md`](docs/architecture.md), [`docs/data-and-analytics.md`](docs/data-and-analytics.md), and the accepted Advanced Observability ADR in [`docs/adr/0001-advanced-observability-content-filter.md`](docs/adr/0001-advanced-observability-content-filter.md).
+
+## Repository map
+
+| Area | Key paths | Responsibility |
+| --- | --- | --- |
+| App shell | `TrafficMonitoring/App` | App lifecycle, model composition, menu-bar entry point |
+| Brand and product UI | `TrafficMonitoring/Brand`, `TrafficMonitoring/Features` | Native macOS information architecture, branded components, Analytics, Applications, Monitor, Settings |
+| Domain | `TrafficMonitoring/Domain` | Network, evidence, analytics, export, application-activity, and Advanced Observability models |
+| Core tracking | `TrafficMonitoring/Tracking` | Delta calculation, interface classification, usage aggregation, evidence export, `nettop` parsing |
+| Platform | `TrafficMonitoring/Platform` | Darwin counters, Network.framework context, CoreWLAN, Location permission |
+| Persistence | `TrafficMonitoring/Persistence` | SwiftData usage/coverage buckets, aliases, checkpointing, historical queries |
+| Advanced prototype | `experiments/advanced-observability` | Network Extension provider, flow aggregation, signing-identity resolution, XPC bridge |
+| Tests | `TrafficMonitoringCoreTests` | Counter, aggregation, coverage, export, locality, parser, app aggregation, persistence semantics |
+| Product docs | `docs` | Positioning, UX, evidence contracts, architecture, implementation status, validation runbooks |
+
+`project.yml` is the authoritative XcodeGen project definition. `Package.swift` exposes the platform-independent Domain/Tracking core to SwiftPM tests.
+
+## Run it
+
+### Without installing Xcode
+
+The easiest development build is produced by GitHub Actions:
+
+1. Open **Actions → CI**.
+2. Open a successful run for the branch/commit you want to test.
 3. Download the **TrafficMonitoring-macOS** artifact.
-4. Unzip the downloaded artifact, then unzip `TrafficMonitoring.app.zip` inside it.
-5. Launch `TrafficMonitoring.app`.
+4. Unzip the artifact, then unzip `TrafficMonitoring.app.zip`.
+5. Move `TrafficMonitoring.app` to Applications if desired and launch it.
 
-The development artifact is ad-hoc signed, not notarized. If macOS blocks it, follow [`docs/run-without-xcode.md`](docs/run-without-xcode.md) for the safe local-test steps and checksum verification.
+The artifact is ad-hoc signed, not notarized. If macOS quarantine blocks the development build, follow [`docs/run-without-xcode.md`](docs/run-without-xcode.md).
 
-The app runs as an `LSUIElement` menu-bar utility, so after launch look for the network icon in the macOS menu bar rather than expecting a normal main window.
+Traffic Monitoring is an `LSUIElement` menu-bar app. After launch, look for its shield icon in the macOS menu bar.
 
-## Local Xcode development
+The ad-hoc build supports the complete core product and App Activity Preview. It **cannot** activate the Advanced Provider because that path requires Apple system-extension/network-extension signing capabilities.
 
-Full Xcode is optional for simply running the downloadable development build, but it is still the supported local workflow for interactive development/debugging.
+### Local development
 
-The project definition is kept in `project.yml` so the generated Xcode project does not become a large, noisy source-of-truth file.
+Prerequisites:
+
+- macOS 14+
+- full Xcode installation for app builds/tests
+- XcodeGen
+- Swift toolchain compatible with the repository project
+
+Generate the project:
 
 ```bash
 brew install xcodegen
@@ -50,42 +297,118 @@ xcodegen generate
 open TrafficMonitoring.xcodeproj
 ```
 
-Run the `TrafficMonitoring` scheme on macOS 14+.
+Run the `TrafficMonitoring` scheme.
 
-## Core tests
-
-Platform-independent tracking primitives can be tested with Swift Package Manager:
+Core deterministic tests can also run through SwiftPM:
 
 ```bash
 swift test
 ```
 
-The package test harness intentionally compiles only `Domain/` and `Tracking/`, keeping counter/delta semantics deterministic and testable without live networking.
+## Evidence and maturity
 
-## Measurement scope
+Traffic Monitoring is an active observability and validation project, not a production network-forensics suite and not yet a privacy-audit engine.
 
-Traffic Monitoring measures bytes transferred by the Mac's physical network interfaces while the app is running. It does **not** inspect packet contents, websites, DNS queries, destinations, or browsing history.
+The maturity level depends on the evidence source:
 
-Because interface counters can include local-network traffic, totals are **network usage**, not guaranteed carrier/ISP billing usage.
+| Capability | Current maturity | Safe conclusion |
+| --- | --- | --- |
+| Physical-interface usage | Implemented and covered by automated tests; real-network acceptance remains relevant | Bytes were observed on a supported physical interface/network context while the app was observing |
+| Historical network evidence | Implemented with coverage/identity quality and versioned export | Aggregate usage can be reproduced together with known observation limitations |
+| App Activity Preview | Implemented, non-privileged, best-effort | These applications/processes appear in the latest macOS process network summary with these cumulative byte totals |
+| Application grouping | Implemented as best-effort PID/application resolution | Multiple observed processes can be grouped under an owning macOS application when that relationship is observable |
+| Advanced Provider | Source/build/package prototype passes CI | The architecture compiles/packages; signed runtime behavior is **not** proven by CI |
+| Per-app locality / byte evidence | Experimental / not release-validated | No privacy verdict until controlled real-Mac reconciliation passes |
+| Privacy Audit | Future only | No audit claim is currently supported |
+
+Traffic Monitoring deliberately does **not** claim that core counters or App Activity Preview can tell:
+
+- which remote destination received traffic;
+- whether every application byte stayed local or reached the public Internet;
+- that an application is `local-only`;
+- exact ISP or mobile-carrier billing usage;
+- complete activity during periods when the relevant evidence source was not observing.
+
+The core measurement is physical-interface traffic. LAN/NAS traffic may therefore be included in totals. VPN virtual interfaces are excluded from the main physical counter path to avoid double counting, but VPN and helper-process behavior remains an important validation case for richer application evidence.
+
+Use these sources for current truth:
+
+- [Product contract](docs/product-spec.md)
+- [A0–A2 evidence/export status](docs/a0-a2-implementation-status.md)
+- [B0–B2 Advanced Provider status](docs/b0-b2-implementation-status.md)
+- [Non-privileged App Activity Preview](docs/non-privileged-app-activity.md)
+- [Evidence export contract](docs/evidence-export.md)
+- [Testing and real-Mac validation](docs/testing.md)
+
+## Build and validate
+
+Run the narrowest checks for the area you change. The repository-wide CI gate generates the Xcode project, tests the platform-independent core, validates the non-privileged process-summary source, builds/tests the macOS app, builds the unsigned Advanced Observability spike, verifies the embedded system-extension structure, creates a clean Release app, and packages the runnable development artifact.
+
+Core checks:
+
+```bash
+xcodegen generate
+swift test
+```
+
+Representative app build/test gate:
+
+```bash
+xcodebuild \
+  -project TrafficMonitoring.xcodeproj \
+  -scheme TrafficMonitoring \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  CODE_SIGNING_ALLOWED=NO \
+  build test
+```
+
+Coding agents start from [`AGENTS.md`](AGENTS.md), which routes work through focused progressive-disclosure documentation instead of loading the entire repository context.
+
+## Strategic role in the local-first stack
+
+Traffic Monitoring is **supporting evidence infrastructure**, not a fourth AI runtime pillar.
+
+```text
+Product-grade local-first stack
+│
+├── Reusable AI infrastructure
+│   ├── Local LLM Server
+│   ├── Local ASR Server
+│   └── Android Local LLM Harness
+│
+├── Reference applications
+│   ├── ClosedRoom
+│   ├── RedactGuard
+│   └── Aura Finance
+│
+└── Evidence & observability
+    └── Traffic Monitoring
+```
+
+The relationship is simple:
+
+> **Local-first gives a product control. Observability helps make that control understandable and, where the platform allows it, verifiable.**
+
+Traffic Monitoring therefore strengthens the broader mission without forcing AI into a project that does not need it.
 
 ## Documentation
 
-The documentation uses progressive disclosure so developers and coding agents do not need to load the full architecture for every task.
+Start small:
 
-Start with:
+- [`AGENTS.md`](AGENTS.md) — invariants and progressive-disclosure routing
+- [`docs/README.md`](docs/README.md) — documentation map
+- [`docs/positioning.md`](docs/positioning.md) — ecosystem role and public narrative
+- [`docs/product-spec.md`](docs/product-spec.md) — current product contract
+- [`docs/brand.md`](docs/brand.md) — visual system
+- [`docs/ux.md`](docs/ux.md) — product information architecture
+- [`docs/data-and-analytics.md`](docs/data-and-analytics.md) — persistence, analytics, evidence coverage
+- [`docs/non-privileged-app-activity.md`](docs/non-privileged-app-activity.md) — application preview boundary
+- [`docs/evidence-export.md`](docs/evidence-export.md) — JSON/CSV evidence contract
+- [`docs/b0-b2-implementation-status.md`](docs/b0-b2-implementation-status.md) — signed Advanced Provider status
 
-- [`AGENTS.md`](AGENTS.md) — compact rules and task-based document routing.
-- [`docs/README.md`](docs/README.md) — documentation map.
-- [`docs/implementation-plan.md`](docs/implementation-plan.md) — phased execution plan.
+## Author and mission
 
-Focused documents:
+Traffic Monitoring is built by [Daniele Moltisanti](https://daniele21.github.io/) as part of an open exploration of **product-grade local-first architectures**: reusable infrastructure, privacy-aware observability, measurable evidence, and intuitive software running on user-owned hardware.
 
-- [`docs/run-without-xcode.md`](docs/run-without-xcode.md)
-- [`docs/product-spec.md`](docs/product-spec.md)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/tracking-engine.md`](docs/tracking-engine.md)
-- [`docs/m1-validation.md`](docs/m1-validation.md)
-- [`docs/data-and-analytics.md`](docs/data-and-analytics.md)
-- [`docs/ux.md`](docs/ux.md)
-- [`docs/testing.md`](docs/testing.md)
-- [`docs/decisions.md`](docs/decisions.md)
+The project is developed in public alongside the broader local-first infrastructure and reference-application stack.
